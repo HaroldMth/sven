@@ -1,0 +1,137 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0
+rootdir: /mnt/lfs/home/harold/Desktop/sven
+configfile: pyproject.toml
+plugins: cov-7.1.0
+collected 15 items
+
+tests/test_models.py F..                                                 [ 20%]
+tests/test_sync_db.py EEEE                                               [ 46%]
+tests/test_local_db.py EEEEE                                             [ 80%]
+tests/test_aur_db.py EEE                                                 [100%]
+
+==================================== ERRORS ====================================
+______________________ ERROR at setup of test_syncdb_load ______________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_sync_db.py, line 26
+  def test_syncdb_load(fake_syncdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_syncdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_sync_db.py:26
+_______________ ERROR at setup of test_syncdb_virtual_resolution _______________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_sync_db.py, line 39
+  def test_syncdb_virtual_resolution(fake_syncdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_syncdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_sync_db.py:39
+_____________________ ERROR at setup of test_syncdb_search _____________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_sync_db.py, line 48
+  def test_syncdb_search(fake_syncdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_syncdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_sync_db.py:48
+______________________ ERROR at setup of test_syncdb_sync ______________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_sync_db.py, line 55
+  def test_syncdb_sync(fake_syncdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_syncdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_sync_db.py:55
+_____________________ ERROR at setup of test_local_db_init _____________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py, line 13
+  def test_local_db_init(fake_localdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_localdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py:13
+___________________ ERROR at setup of test_register_package ____________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py, line 19
+  def test_register_package(fake_localdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_localdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py:19
+__________________ ERROR at setup of test_unregister_package ___________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py, line 36
+  def test_unregister_package(fake_localdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_localdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py:36
+________________________ ERROR at setup of test_orphans ________________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py, line 49
+  def test_orphans(fake_localdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_localdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py:49
+_________________ ERROR at setup of test_lock_acquire_release __________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py, line 69
+  def test_lock_acquire_release(fake_localdb, mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, fake_localdb, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_local_db.py:69
+_____________________ ERROR at setup of test_aurdb_search ______________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_aur_db.py, line 4
+  def test_aurdb_search(mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_aur_db.py:4
+______________________ ERROR at setup of test_aurdb_info _______________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_aur_db.py, line 24
+  def test_aurdb_info(mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_aur_db.py:24
+_________________ ERROR at setup of test_aurdb_info_not_found __________________
+file /mnt/lfs/home/harold/Desktop/sven/tests/test_aur_db.py, line 47
+  def test_aurdb_info_not_found(mocker):
+E       fixture 'mocker' not found
+>       available fixtures: cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, cov, doctest_namespace, monkeypatch, no_cover, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/mnt/lfs/home/harold/Desktop/sven/tests/test_aur_db.py:47
+=================================== FAILURES ===================================
+________________________ test_package_creation_minimal _________________________
+
+    def test_package_creation_minimal():
+        pkg = Package(name="foo", version="1.0", desc="A pkg", url="", repo="core")
+        assert pkg.name == "foo"
+        assert pkg.deps == []
+>       assert pkg.origin == ""
+E       AssertionError: assert 'official' == ''
+E         
+E         + official
+
+tests/test_models.py:8: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_models.py::test_package_creation_minimal - AssertionError: ...
+ERROR tests/test_sync_db.py::test_syncdb_load
+ERROR tests/test_sync_db.py::test_syncdb_virtual_resolution
+ERROR tests/test_sync_db.py::test_syncdb_search
+ERROR tests/test_sync_db.py::test_syncdb_sync
+ERROR tests/test_local_db.py::test_local_db_init
+ERROR tests/test_local_db.py::test_register_package
+ERROR tests/test_local_db.py::test_unregister_package
+ERROR tests/test_local_db.py::test_orphans
+ERROR tests/test_local_db.py::test_lock_acquire_release
+ERROR tests/test_aur_db.py::test_aurdb_search
+ERROR tests/test_aur_db.py::test_aurdb_info
+ERROR tests/test_aur_db.py::test_aurdb_info_not_found
+==================== 1 failed, 2 passed, 12 errors in 0.19s ====================

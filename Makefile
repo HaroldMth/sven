@@ -17,10 +17,7 @@ run:
 
 # ── Build binary via PyInstaller ─────────────────────────────
 build:
-	pyinstaller --onefile \
-		--name sven \
-		--strip \
-		sven/__main__.py
+	python3 -m PyInstaller sven.spec
 	@echo ""
 	@echo "Binary ready: dist/sven"
 

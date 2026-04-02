@@ -76,7 +76,16 @@ mirror             = auto
 ignored_packages  =
 held_packages     =
 EOF
+EOF
 fi
+
+# ── Install built-in initscripts ─────────────────────────────
+echo ":: Installing built-in initscripts..."
+for script in bluetooth dbus lightdm networkmanager pulseaudio sddm; do
+    echo "   → $script"
+    curl -fsSL "https://raw.githubusercontent.com/haroldmth/sven/main/initscripts/$script" -o "/etc/sven/initscripts/$script"
+    chmod +x "/etc/sven/initscripts/$script"
+done
 
 echo ""
 echo "✓  Sven installed successfully!"

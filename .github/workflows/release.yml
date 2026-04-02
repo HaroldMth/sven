@@ -22,7 +22,7 @@ jobs:
 
       - name: Build binary
         run: |
-          pyinstaller --onefile --name sven --strip sven/__main__.py
+          make build
 
       - name: Generate SHA256
         run: |
@@ -38,5 +38,21 @@ jobs:
           files: |
             dist/sven-x86_64-linux
             dist/SHA256SUMS
-        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update AUR PKGBUILD checksums
+        run: |
+          # The binary is out, modify PKGBUILD with its actual shasum
+          CSUM=$(cat dist/SHA256SUMS | awk '{print $1}')
+          sed -i "s/sha256sums=('SKIP')/sha256sums=('${CSUM}')/" PKGBUILD
+          sed -i "s/pkgver=.*/pkgver=${GITHUB_REF_NAME#v}/" PKGBUILD
+
+      - name: Publish AUR Package (sven-bin)
+        uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
+        with:
+          pkgname: sven-bin
+          pkgbuild: ./PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Release ${{ github.ref_name }}"
