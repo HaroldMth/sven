@@ -1,0 +1,34 @@
+#!/bin/sh
+#
+# pulseaudio - PulseAudio Sound System
+#
+# Seven OS init script shipped by Sven
+
+DAEMON="/usr/bin/pulseaudio"
+
+case "$1" in
+  start)
+    echo "Starting PulseAudio..."
+    $DAEMON --daemonize=yes --system
+    ;;
+  stop)
+    echo "Stopping PulseAudio..."
+    killall pulseaudio 2>/dev/null
+    ;;
+  restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+  status)
+    if pidof pulseaudio > /dev/null; then
+      echo "PulseAudio is running."
+    else
+      echo "PulseAudio is NOT running."
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

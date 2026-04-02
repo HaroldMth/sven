@@ -1,0 +1,39 @@
+#!/bin/sh
+#
+# networkmanager - NetworkManager daemon
+#
+# Seven OS init script shipped by Sven
+
+DAEMON="/usr/sbin/NetworkManager"
+PIDFILE="/run/NetworkManager/NetworkManager.pid"
+
+case "$1" in
+  start)
+    echo "Starting NetworkManager..."
+    $DAEMON
+    ;;
+  stop)
+    echo "Stopping NetworkManager..."
+    if [ -f "$PIDFILE" ]; then
+      kill "$(cat "$PIDFILE")"
+    else
+      killall NetworkManager 2>/dev/null
+    fi
+    ;;
+  restart)
+    $0 stop
+    sleep 2
+    $0 start
+    ;;
+  status)
+    if pidof NetworkManager > /dev/null; then
+      echo "NetworkManager is running."
+    else
+      echo "NetworkManager is NOT running."
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

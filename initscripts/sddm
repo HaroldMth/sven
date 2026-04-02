@@ -1,0 +1,41 @@
+#!/bin/sh
+#
+# sddm - Simple Desktop Display Manager
+#
+# Seven OS init script shipped by Sven
+
+DAEMON="/usr/bin/sddm"
+PIDFILE="/run/sddm.pid"
+
+case "$1" in
+  start)
+    echo "Starting SDDM..."
+    $DAEMON &
+    echo $! > $PIDFILE
+    ;;
+  stop)
+    echo "Stopping SDDM..."
+    if [ -f "$PIDFILE" ]; then
+      kill "$(cat "$PIDFILE")"
+      rm -f "$PIDFILE"
+    else
+      killall sddm 2>/dev/null
+    fi
+    ;;
+  restart)
+    $0 stop
+    sleep 2
+    $0 start
+    ;;
+  status)
+    if pidof sddm > /dev/null; then
+      echo "SDDM is running."
+    else
+      echo "SDDM is NOT running."
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

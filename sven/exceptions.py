@@ -265,3 +265,39 @@ class InvalidConfigError(ConfigError):
 class MigrationError(SvenError):
     """Init system migration error."""
     pass
+
+
+# ── Hardening ────────────────────────────────────────────────
+
+class FileConflictError(SvenError):
+    """A file is already owned by another package."""
+    def __init__(self, filename: str, owner_pkg: str, new_pkg: str):
+        self.filename  = filename
+        self.owner_pkg = owner_pkg
+        self.new_pkg   = new_pkg
+        super().__init__(
+            f"File conflict: {filename} is owned by '{owner_pkg}', "
+            f"cannot be overwritten by '{new_pkg}'"
+        )
+
+class SystemdDependencyError(SvenError):
+    """Package requires systemd components unavailable on this init system."""
+    def __init__(self, pkg: str, systemd_deps: list):
+        self.pkg          = pkg
+        self.systemd_deps = systemd_deps
+        deps_str = ", ".join(systemd_deps)
+        super().__init__(
+            f"Package '{pkg}' requires systemd components: {deps_str}. "
+            f"Seven OS uses SysVinit — install from source or find an alternative."
+        )
+
+class ABIIncompatibleError(SvenError):
+    """Binary package requires a newer glibc than the host provides."""
+    def __init__(self, pkg: str, required_glibc: str, host_glibc: str):
+        self.pkg             = pkg
+        self.required_glibc  = required_glibc
+        self.host_glibc      = host_glibc
+        super().__init__(
+            f"ABI incompatible: '{pkg}' requires glibc >= {required_glibc}, "
+            f"but host has {host_glibc}. Build from source instead."
+        )

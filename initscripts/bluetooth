@@ -1,0 +1,34 @@
+#!/bin/sh
+#
+# bluetooth - Bluetooth daemon
+#
+# Seven OS init script shipped by Sven
+
+DAEMON="/usr/libexec/bluetooth/bluetoothd"
+
+case "$1" in
+  start)
+    echo "Starting Bluetooth daemon..."
+    $DAEMON &
+    ;;
+  stop)
+    echo "Stopping Bluetooth daemon..."
+    killall bluetoothd 2>/dev/null
+    ;;
+  restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+  status)
+    if pidof bluetoothd > /dev/null; then
+      echo "Bluetooth is running."
+    else
+      echo "Bluetooth is NOT running."
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

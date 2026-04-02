@@ -1,0 +1,34 @@
+#!/bin/sh
+#
+# lightdm - Light Display Manager
+#
+# Seven OS init script shipped by Sven
+
+DAEMON="/usr/sbin/lightdm"
+
+case "$1" in
+  start)
+    echo "Starting LightDM..."
+    $DAEMON &
+    ;;
+  stop)
+    echo "Stopping LightDM..."
+    killall lightdm 2>/dev/null
+    ;;
+  restart)
+    $0 stop
+    sleep 2
+    $0 start
+    ;;
+  status)
+    if pidof lightdm > /dev/null; then
+      echo "LightDM is running."
+    else
+      echo "LightDM is NOT running."
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

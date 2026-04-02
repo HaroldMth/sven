@@ -1,0 +1,39 @@
+#!/bin/sh
+#
+# dbus - D-Bus system message bus
+#
+# Seven OS init script shipped by Sven
+
+DAEMON="/usr/bin/dbus-daemon"
+PIDFILE="/run/dbus/pid"
+
+case "$1" in
+  start)
+    echo "Starting D-Bus system message bus..."
+    mkdir -p /run/dbus
+    $DAEMON --system --fork
+    ;;
+  stop)
+    echo "Stopping D-Bus system message bus..."
+    if [ -f "$PIDFILE" ]; then
+      kill "$(cat "$PIDFILE")"
+      rm -f "$PIDFILE"
+    fi
+    ;;
+  restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+  status)
+    if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+      echo "D-Bus is running."
+    else
+      echo "D-Bus is NOT running."
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac
