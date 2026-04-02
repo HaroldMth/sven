@@ -197,7 +197,7 @@ class TestHookScanner(unittest.TestCase):
         self.assertGreater(len(result.findings), 0)
 
         # Should find curl, bash -c, eval, base64 -d
-        patterns_found = [f["pattern"] for f in result.findings]
+        patterns_found = [f.pattern_matched for f in result.findings]
         self.assertIn("curl", patterns_found)
         self.assertIn("eval", patterns_found)
         self.assertIn("base64 -d", patterns_found)
@@ -216,7 +216,7 @@ class TestHookScanner(unittest.TestCase):
 
         result = scan_pkgbuild_dir(self.tmpdir)
         self.assertFalse(result.safe)
-        patterns = [f["pattern"] for f in result.findings]
+        patterns = [f.pattern_matched for f in result.findings]
         self.assertIn("rm -rf /", patterns)
 
     def test_comments_are_skipped(self):

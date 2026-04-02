@@ -20,8 +20,7 @@ from ..config import get_config
 from ..exceptions import BuildError, RootBuildError
 from ..security.hook_scanner import (
     scan_pkgbuild_dir,
-    print_scan_warnings,
-    prompt_user_approval,
+    prompt_hook_approval,
 )
 
 
@@ -85,13 +84,17 @@ def run_makepkg(
     if not skip_security_scan:
         scan_result = scan_pkgbuild_dir(pkg_dir)
         if not scan_result.safe:
-            print_scan_warnings(scan_result, pkg_name)
             if interactive:
-                if not prompt_user_approval(pkg_name):
+                action = prompt_hook_approval(pkg_name, scan_result)
+                if action == "A":
                     raise BuildError(
                         pkg_name,
                         "Build cancelled by user after security warning",
                     )
+                elif action == "S":
+                    # Strip hook files to skip them
+                    for h_file in list(pkg_path.glob("*.install")) + list(pkg_path.glob("*.sh")):
+                        h_file.unlink()
             else:
                 raise BuildError(
                     pkg_name,

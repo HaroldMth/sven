@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..config import get_config
 from ..exceptions import HookError, HookTranslationError
+from ..security.hook_scanner import scan_file, prompt_hook_approval
 
 # Standard Arch auto-hooks that we manually execute
 AUTO_HOOKS = [
@@ -67,6 +68,21 @@ class HookRunner:
         path = Path(self.install_file)
         if not path.exists():
             return
+
+        # Phase 8: Hook Scanning implementation
+        scan_result = scan_file(str(path))
+        if not scan_result.safe:
+            if self.is_aur:
+                action = prompt_hook_approval(self.pkg_name, scan_result)
+                if action == "A":
+                    raise HookError(f"Install aborted by user due to security warnings in {self.pkg_name}.")
+                elif action == "S":
+                    print(f"   [Hooks] Skipping {phase} for {self.pkg_name} due to security concerns.")
+                    return
+                # action "R" continues execution
+            else:
+                # Auto-approve official
+                pass
 
         # Read the script to find systemctl commands
         script_content = path.read_text(errors="replace")
