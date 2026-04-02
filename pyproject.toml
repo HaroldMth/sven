@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "sven"
+version = "1.0.0"
+description = "The package manager for Seven OS — powered by Arch repos, built for freedom."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Harold", email = "harold@hansbyte.dev" }
+]
+keywords = ["package-manager", "linux", "lfs", "arch", "seven-os"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31.0",
+    "zstandard>=0.22.0",
+    "python-gnupg>=0.5.2",
+]
+
+[project.scripts]
+sven = "sven.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/haroldmth/sven"
+Repository = "https://github.com/haroldmth/sven"
+Issues = "https://github.com/haroldmth/sven/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sven*"]

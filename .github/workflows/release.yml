@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests zstandard python-gnupg pyinstaller
+
+      - name: Build binary
+        run: |
+          pyinstaller --onefile --name sven --strip sven/__main__.py
+
+      - name: Generate SHA256
+        run: |
+          sha256sum dist/sven > dist/SHA256SUMS
+
+      - name: Rename binary
+        run: |
+          mv dist/sven dist/sven-x86_64-linux
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/sven-x86_64-linux
+            dist/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
