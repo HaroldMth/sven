@@ -154,51 +154,55 @@ def main():
     # ── Route to command handlers (stubs for now) ─────────────
     cmd = args.command
 
+    if hasattr(args, "no_color") and args.no_color:
+        from .ui.output import disable_colors
+        disable_colors()
+
     if cmd == "install":
         from .commands.install import run
-        run(args)
+        run(args.packages, args.root if hasattr(args, 'root') else None)
     elif cmd == "remove":
         from .commands.remove import run
-        run(args)
+        run(args.packages, recursive=args.orphans if hasattr(args, "orphans") else False)
     elif cmd == "upgrade":
         from .commands.upgrade import run
-        run(args)
+        run(args.packages)
     elif cmd == "update":
         from .commands.update import run
-        run(args)
+        run()
     elif cmd == "search":
         from .commands.search import run
-        run(args)
+        run(args.query)
     elif cmd == "info":
         from .commands.info import run
-        run(args)
+        run(args.package)
     elif cmd == "list":
         from .commands.list_cmd import run
-        run(args)
+        run()
     elif cmd == "sync":
         from .commands.sync import run
-        run(args)
+        run()
     elif cmd == "clean":
         from .commands.clean import run
-        run(args)
+        run(all_cache=args.all if hasattr(args, "all") else False)
     elif cmd == "verify":
         from .commands.verify import run
-        run(args)
+        run(args.package if hasattr(args, "package") else None)
     elif cmd == "orphans":
         from .commands.orphans import run
-        run(args)
+        run()
     elif cmd == "snapshots":
         from .commands.snapshots import run
-        run(args)
+        run()
     elif cmd == "rollback":
         from .commands.rollback import run
-        run(args)
+        run(args.snapshot_id if hasattr(args, 'snapshot_id') else None)
     elif cmd == "mirror":
         from .commands.mirror import run
-        run(args)
+        run(benchmark=(args.mirror_cmd == "fastest" if hasattr(args, "mirror_cmd") else False))
     elif cmd in ("deps", "rdeps"):
         from .commands.deps import run
-        run(args)
+        run(args.package, reverse=(cmd == "rdeps"))
     else:
         parser.print_help()
         sys.exit(1)
