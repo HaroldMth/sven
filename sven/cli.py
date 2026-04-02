@@ -137,6 +137,20 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+LARGE_BANNER = """\033[94m╔══════════════════════════════════════════════════╗
+║                                                  ║
+║   ███████╗██╗   ██╗███████╗███╗   ██╗            ║
+║   ██╔════╝██║   ██║██╔════╝████╗  ██║            ║
+║   ███████╗██║   ██║█████╗  ██╔██╗ ██║            ║
+║   ╚════██║╚██╗ ██╔╝██╔══╝  ██║╚██╗██║            ║
+║   ███████║ ╚████╔╝ ███████╗██║ ╚████║            ║
+║   ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝            ║
+║                                                  ║
+║   v1.0.0  ·  Seven OS Package Manager            ║
+║   by HANS TECH                                   ║
+╚══════════════════════════════════════════════════╝\033[0m
+"""
+
 def main():
     parser  = build_parser()
     args    = parser.parse_args()
@@ -147,7 +161,10 @@ def main():
         get_config().install_root = args.root
 
     if args.command is None:
-        print(BANNER)
+        if not (hasattr(args, "no_color") and args.no_color):
+            print(LARGE_BANNER)
+        else:
+            print(LARGE_BANNER.replace("\033[94m", "").replace("\033[0m", ""))
         parser.print_help()
         sys.exit(0)
 
