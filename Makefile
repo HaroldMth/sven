@@ -31,7 +31,7 @@ lint:
 
 # ── Clean ────────────────────────────────────────────────────
 clean:
-	rm -rf dist/ build/ *.spec __pycache__ \
+	rm -rf dist/ build/ __pycache__ \
 		sven/__pycache__ sven/**/__pycache__
 
 # ── Release (tag + push) ─────────────────────────────────────
