@@ -54,6 +54,8 @@ class Fetcher:
         Returns a dict of {pkg_name: local_file_path}.
         Skips already-cached files.
         """
+        from ..ui.progress import MultiProgressDisplay
+
         results: dict[str, Path] = {}
         to_download: list[Package] = []
 
@@ -69,10 +71,13 @@ class Fetcher:
         if not to_download:
             return results
 
+        # Initialize multi-line display for the remaining downloads
+        display = MultiProgressDisplay([pkg.filename for pkg in to_download])
+
         # Download in parallel
         with ThreadPoolExecutor(max_workers=self.parallel) as pool:
             futures = {
-                pool.submit(self._download_single, pkg): pkg
+                pool.submit(self._download_single, pkg, display): pkg
                 for pkg in to_download
             }
             for future in as_completed(futures):
@@ -80,16 +85,18 @@ class Fetcher:
                 try:
                     path = future.result()
                     results[pkg.name] = path
+                    display.finish_single(pkg.filename)
                 except Exception as e:
                     raise DownloadError(
                         f"Failed to download {pkg.filename}: {e}"
                     )
-
+        
+        display.finish_all()
         return results
 
     # ── Single File Download ─────────────────────────────────
 
-    def _download_single(self, pkg: Package, _retried: bool = False) -> Path:
+    def _download_single(self, pkg: Package, display: 'MultiProgressDisplay', _retried: bool = False) -> Path:
         """
         Download a single package file with progress and resume support.
         Automatically fails over to the next mirror on failure.
@@ -104,11 +111,20 @@ class Fetcher:
             filename=pkg.filename,
         )
 
-        # Resume support: check if partial file exists
+        # Resume support: check if file exists
         resume_pos = 0
         headers = {}
+        
         if dest.exists():
-            resume_pos = dest.stat().st_size
+            file_size = dest.stat().st_size
+            if file_size >= pkg.size and pkg.size > 0:
+                # File is complete or oversized in cache
+                # The transaction logic handles final checksum, but for sanity
+                # we return it now to skip download.
+                return dest
+            
+            # Partial file: Resume if supported
+            resume_pos = file_size
             headers["Range"] = f"bytes={resume_pos}-"
 
         try:
@@ -125,7 +141,14 @@ class Fetcher:
             elif resp.status_code == 206:
                 pass  # Partial content — resume
             elif resp.status_code >= 400:
+                if resp.status_code == 416:
+                    # Range not satisfiable -> partial file is corrupt or server file changed
+                    dest.unlink(missing_ok=True)
+                    resp = requests.get(url, headers={}, stream=True, timeout=15)
+                    resume_pos = 0
+                
                 resp.raise_for_status()
+
 
             total = int(resp.headers.get("content-length", 0)) + resume_pos
             downloaded = resume_pos
@@ -137,20 +160,14 @@ class Fetcher:
                     f.write(chunk)
                     downloaded += len(chunk)
 
-                    # Progress bar
+                    # Update unified multi-line progress
                     if total > 0:
-                        pct = int(downloaded / total * 30)
-                        bar = "█" * pct + "░" * (30 - pct)
-                        mb_done = downloaded / 1_000_000
-                        mb_total = total / 1_000_000
-                        print(
-                            f"\r   {pkg.filename:<40s}  "
-                            f"[{bar}]  "
-                            f"{mb_done:.1f}/{mb_total:.1f} MiB",
-                            end="", flush=True,
-                        )
+                        display.update(pkg.filename, downloaded, total)
 
-            print(f"  ✓")
+            # Final verification: did we get everything?
+            if total > 0 and downloaded < total:
+                raise requests.RequestException(f"Download truncated: got {downloaded}/{total} bytes")
+
             return dest
 
         except requests.RequestException as e:
@@ -158,7 +175,7 @@ class Fetcher:
                 # Failover to next mirror
                 try:
                     self.mirror.next_mirror()
-                    return self._download_single(pkg, _retried=True)
+                    return self._download_single(pkg, display, _retried=True)
                 except Exception:
                     pass
             raise DownloadError(f"Download failed for {pkg.filename}: {e}")

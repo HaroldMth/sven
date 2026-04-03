@@ -6,7 +6,7 @@
 import re
 from pathlib import Path
 from typing import NamedTuple
-from .patterns import DANGEROUS_PATTERNS
+from .patterns import DANGEROUS_PATTERNS, SAFE_PATTERNS
 
 class Finding(NamedTuple):
     line_number: int
@@ -35,14 +35,24 @@ def scan_file(filepath: str) -> list[Finding]:
         if stripped.startswith("#"):
             continue
 
+        is_safe = False
+        for sp in SAFE_PATTERNS:
+            if re.search(sp, stripped):
+                is_safe = True
+                break
+
+        if is_safe:
+            continue
+
         for p in DANGEROUS_PATTERNS:
-            if p.regex in stripped:
+            if re.search(p.regex, stripped):
                 findings.append(Finding(
                     line_number=line_no,
                     line_content=stripped[:120],
                     pattern_matched=p.regex,
                     severity=p.severity
                 ))
+
 
     return findings
 

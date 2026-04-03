@@ -23,7 +23,7 @@ def run(pkg_name: str):
     
     if not pkg:
         aur = AURDB()
-        pkg = aur.get(pkg_name)
+        pkg = aur.info(pkg_name)
         
     if not pkg:
         print_error(f"Package '{pkg_name}' not found anywhere.")
@@ -31,9 +31,9 @@ def run(pkg_name: str):
         
     print(f"   Name           : {pkg.name}")
     print(f"   Version        : {pkg.version}")
-    print(f"   Description    : {pkg.desc}")
-    print(f"   URL            : {pkg.url}")
-    print(f"   Repository     : {pkg.repo}")
+    print(f"   Description    : {pkg.desc or 'None'}")
+    print(f"   URL            : {pkg.url or 'None'}")
+    print(f"   Repository     : {pkg.repo or 'AUR'}")
     print(f"   Depends On     : {', '.join(pkg.deps) or 'None'}")
     print(f"   Make Depends   : {', '.join(pkg.makedeps) or 'None'}")
     print(f"   Opt Depends    : {', '.join(pkg.optdeps) or 'None'}")

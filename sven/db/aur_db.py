@@ -90,11 +90,13 @@ class AURDB:
 
     def __init__(
         self,
-        cache_dir : str = DB_AUR_CACHE,
-        ttl       : int = AUR_CACHE_TTL,
+        cache_dir: str = None,
+        rpc_url  : str = None,
     ):
-        self.cache_dir = Path(cache_dir)
-        self.ttl       = ttl
+        from .. import constants as C
+        self.cache_dir = Path(cache_dir or C.DB_AUR_CACHE)
+        self.rpc_url   = rpc_url or C.AUR_RPC_URL
+        self.ttl       = AUR_CACHE_TTL
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Public API ────────────────────────────────────────────

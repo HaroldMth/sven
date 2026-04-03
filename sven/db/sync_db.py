@@ -64,6 +64,7 @@ def _parse_desc(desc_text: str, repo: str) -> Package:
         origin      = "official",
         arch        = get("ARCH") or ARCH_ARCH,
         filename    = get("FILENAME"),
+        csum        = get("SHA256SUM"),
         size        = int(get("CSIZE") or 0),
         isize       = int(get("ISIZE") or 0),
         packager    = get("PACKAGER"),
@@ -91,15 +92,16 @@ class SyncDB:
 
     def __init__(
         self,
-        mirror  : str = DEFAULT_MIRROR,
-        db_path : str = DB_SYNC,
-        repos   : list[str] = ARCH_REPOS,
-        arch    : str = ARCH_ARCH,
+        mirror  : str = None,
+        db_path : str = None,
+        repos   : list[str] = None,
+        arch    : str = None,
     ):
-        self.mirror   = mirror.rstrip("/")
-        self.db_path  = Path(db_path)
-        self.repos    = repos
-        self.arch     = arch
+        from .. import constants as C
+        self.mirror   = (mirror or C.DEFAULT_MIRROR).rstrip("/")
+        self.db_path  = Path(db_path or C.DB_SYNC)
+        self.repos    = repos or C.ARCH_REPOS
+        self.arch     = arch or C.ARCH_ARCH
         self.db_path.mkdir(parents=True, exist_ok=True)
 
         # In-memory index: name → Package
@@ -202,7 +204,7 @@ class SyncDB:
                 desc
         """
         try:
-            with tarfile.open(db_file, "r:gz") as tar:
+            with tarfile.open(db_file, "r:*") as tar:
                 desc_files = [
                     m for m in tar.getmembers()
                     if m.name.endswith("/desc")
@@ -226,11 +228,16 @@ class SyncDB:
 
     # ── Query ─────────────────────────────────────────────────
 
+    def _ensure_loaded(self):
+        if not self._index:
+            self.load()
+
     def get(self, name: str) -> Optional[Package]:
         """
         Get a package by exact name.
         Also resolves virtual packages via provides map.
         """
+        self._ensure_loaded()
         if name in self._index:
             return self._index[name]
         # Try resolving as a virtual
@@ -244,6 +251,7 @@ class SyncDB:
         Fuzzy search packages by name or description.
         Returns list sorted by relevance (exact match first).
         """
+        self._ensure_loaded()
         query_lower = query.lower()
         exact   = []
         starts  = []
@@ -262,6 +270,7 @@ class SyncDB:
 
     def all_packages(self) -> list[Package]:
         """Return all known packages across all repos."""
+        self._ensure_loaded()
         return list(self._index.values())
 
     def is_loaded(self) -> bool:

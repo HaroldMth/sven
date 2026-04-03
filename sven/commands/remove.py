@@ -7,7 +7,7 @@ import sys
 from ..transaction import RemoveTransaction
 from ..ui import print_banner, print_section, print_success, print_error, confirm
 
-def run(packages: list[str], recursive: bool = False):
+def run(packages: list[str], recursive: bool = False, force_protected: bool = False):
     print_banner()
     
     if not packages:
@@ -22,7 +22,8 @@ def run(packages: list[str], recursive: bool = False):
         
     tx = RemoveTransaction()
     
-    if tx.execute(packages):
+    if tx.execute(packages, force_protected=force_protected):
+
         for p in packages:
             print_success(f"{p} removed successfully")
     else:

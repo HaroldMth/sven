@@ -42,11 +42,14 @@ def run_auto_hooks(install_root: str = None):
             # (e.g. headless server doesn't have gtk-update-icon-cache)
             subprocess.run(
                 cmd,
-                root_dir=root if root != "/" else None,
+                cwd=root if root != "/" else None,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=30
+                stderr=subprocess.STDOUT,
+                timeout=60
             )
+
+        except subprocess.TimeoutExpired:
+            print(f"      - Warning: '{cmd[0]}' took too long and was skipped.")
         except (FileNotFoundError, OSError):
             continue
 
@@ -197,9 +200,12 @@ fi
         return " ".join(new_parts)
 
     def _log_hook_output(self, phase: str, output: str):
-        """Append to global hooks.log"""
-        log_path = Path("/var/log/sven_hooks.log")
+        """Append to the rooted hooks.log"""
+        from ..constants import LOG_HOOKS
+        log_path = Path(LOG_HOOKS)
+        
         try:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
             with log_path.open("a") as f:
                 f.write(f"\n--- {self.pkg_name} ({phase}) ---\n")
                 f.write(output)

@@ -45,6 +45,17 @@ DEFAULTS = {
         "ignored_packages"  : "",
         "held_packages"     : "",
     },
+    "safety": {
+        "protected_packages": (
+            # LFS Core Toolchain & System
+            "glibc linux-api-headers filesystem gcc binutils glibc-locales bash coreutils "
+            "linux-firmware make patch m4 perl python gawk grep sed findutils tar "
+            "gzip bzip2 xz zstd util-linux procps-ng e2fsprogs shadow less "
+            # Critical BLFS Libraries
+            "zlib openssl libffi pcre2 expat libcap libxml2 ncurses readline "
+            "sqlite pkgconf ca-certificates curl wget"
+        ),
+    },
 }
 
 
@@ -161,6 +172,13 @@ class Config:
     @property
     def held_packages(self) -> list[str]:
         raw = self._parser.get("upgrade", "held_packages")
+        return [p.strip() for p in raw.split() if p.strip()]
+
+    # ── Safety ───────────────────────────────────────────────
+
+    @property
+    def protected_packages(self) -> list[str]:
+        raw = self._parser.get("safety", "protected_packages", fallback="")
         return [p.strip() for p in raw.split() if p.strip()]
 
     # ── Derived paths (respect install_root) ─────────────────

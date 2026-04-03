@@ -82,7 +82,7 @@ class PKGBUILDFetcher:
                 ["git", "clone", "--depth=1", url, str(dest)],
                 capture_output=True,
                 text=True,
-                timeout=120,
+                timeout=300,
             )
             if result.returncode != 0:
                 raise BuildError(
@@ -92,7 +92,7 @@ class PKGBUILDFetcher:
         except FileNotFoundError:
             raise BuildError(pkg_name, "git is not installed")
         except subprocess.TimeoutExpired:
-            raise BuildError(pkg_name, "git clone timed out (120s)")
+            raise BuildError(pkg_name, "git clone timed out (300s)")
 
         # Verify PKGBUILD exists
         pkgbuild = dest / "PKGBUILD"
@@ -118,7 +118,7 @@ class PKGBUILDFetcher:
                 ["git", "-C", str(dest), "pull", "--ff-only"],
                 capture_output=True,
                 text=True,
-                timeout=60,
+                timeout=300,
             )
             if result.returncode != 0:
                 # Pull failed — try a fresh clone
@@ -133,7 +133,7 @@ class PKGBUILDFetcher:
         except FileNotFoundError:
             raise BuildError(pkg_name, "git is not installed")
         except subprocess.TimeoutExpired:
-            raise BuildError(pkg_name, "git pull timed out (60s)")
+            raise BuildError(pkg_name, "git pull timed out (300s)")
 
         print(f"   ✓ {pkg_name} updated")
         return dest

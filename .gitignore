@@ -10,3 +10,6 @@ build/
 venv/
 *.log
 .DS_Store
+docs/
+sven_system/
+*.zip

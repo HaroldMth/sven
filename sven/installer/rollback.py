@@ -24,7 +24,9 @@ SNAPSHOT_DIR = "/var/lib/sven/snapshots"
 class RollbackManager:
     """Manages pre-transaction snapshots and system restorations."""
     
-    def __init__(self, snapshot_dir: str = SNAPSHOT_DIR):
+    def __init__(self, snapshot_dir: str = None):
+        from .. import constants as C
+        snapshot_dir = snapshot_dir or C.DB_SNAPSHOTS
         self.config = get_config()
         self.snap_dir = Path(self.config.rooted(snapshot_dir))
         if not self.snap_dir.exists():

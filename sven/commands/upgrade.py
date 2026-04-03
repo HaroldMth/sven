@@ -7,7 +7,7 @@ import sys
 from ..transaction import UpgradeTransaction
 from ..ui import print_banner, print_section, print_success, print_error, confirm
 
-def run(packages: list[str] = None):
+def run(packages: list[str] = None, force_protected: bool = False):
     print_banner()
     print_section("Checking for upgrades...")
     
@@ -17,7 +17,8 @@ def run(packages: list[str] = None):
         
     tx = UpgradeTransaction()
     
-    if tx.execute(packages):
+    if tx.execute(packages, force_protected=force_protected):
+
         print_success("System upgraded successfully")
     else:
         print_error("Upgrade failed.")

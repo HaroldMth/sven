@@ -20,11 +20,7 @@ from ..exceptions import SystemdDependencyError
 # HARD deps: the package links against systemd or requires it to function
 SYSTEMD_HARD_DEPS = frozenset({
     "systemd",
-    "systemd-libs",
     "systemd-sysvcompat",
-    "libsystemd",
-    "libsystemd.so",
-    "libudev.so",         # Part of systemd on Arch (eudev is the alternative)
     "systemd-resolvconf",
     "systemd-ukify",
 })
@@ -75,9 +71,10 @@ def check_systemd_deps(pkg: Package, init_system: str = "sysvinit") -> SystemdCh
             alternatives={}, source_build_advised=False,
         )
 
-    all_deps = pkg.deps + pkg.makedeps
+    all_deps = pkg.deps
     hard_deps = []
     soft_deps = []
+
     alternatives = {}
 
     for dep in all_deps:
@@ -85,6 +82,11 @@ def check_systemd_deps(pkg: Package, init_system: str = "sysvinit") -> SystemdCh
         dep_name = dep.split(">=")[0].split("<=")[0].split(">")[0].split("<")[0].split("=")[0].strip()
 
         if dep_name in SYSTEMD_HARD_DEPS:
+            # Special case: pacman declares "systemd" for sysusers hook but operates
+            # perfectly fine natively without it.
+            if pkg.name == "pacman" and dep_name == "systemd":
+                continue
+
             hard_deps.append(dep_name)
             alt = SYSTEMD_ALTERNATIVES.get(dep_name)
             if alt:

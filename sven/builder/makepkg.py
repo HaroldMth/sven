@@ -107,7 +107,7 @@ def run_makepkg(
 
     cmd = [
         "makepkg",
-        "--syncdeps",      # Auto-install build deps
+        "--nodeps",        # Trust Sven for dependencies (skip pacman checks)
         "--noconfirm",     # Don't ask for confirmation
         "--clean",         # Clean after build
         "--force",         # Overwrite existing package
@@ -134,9 +134,10 @@ def run_makepkg(
 
     # ── Run the build ──
     print(f"\n   ╭{'─' * 50}╮")
-    print(f"   │  Building: {pkg_name:<38s} │")
-    print(f"   │  Jobs: {config.parallel_jobs:<41s} │")
+    print(f"   │  Building: {pkg_name:<38} │")
+    print(f"   │  Jobs: {config.parallel_jobs:<41d} │")
     print(f"   ╰{'─' * 50}╯\n")
+
 
     try:
         if interactive:
@@ -190,7 +191,7 @@ def run_makepkg(
 def _find_built_package(pkg_dir: str, pkg_name: str) -> Optional[str]:
     """
     Find the built .pkg.tar.zst in the package directory.
-    Looks for the most recently modified matching file.
+    Prefers the real package over debug/split packages.
     """
     patterns = [
         f"{pkg_name}-*.pkg.tar.zst",
@@ -201,8 +202,10 @@ def _find_built_package(pkg_dir: str, pkg_name: str) -> Optional[str]:
 
     for pattern in patterns:
         matches = glob.glob(os.path.join(pkg_dir, pattern))
+        # Always skip -debug packages — they only contain debug symbols
+        matches = [m for m in matches if "-debug-" not in Path(m).name]
         if matches:
-            # Return the most recently modified
+            # Sort by modification time, newest first
             matches.sort(key=os.path.getmtime, reverse=True)
             return matches[0]
 

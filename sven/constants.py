@@ -5,6 +5,17 @@
 # ============================================================
 
 import os
+import sys
+
+# ── Dynamic Root parsing ─────────────────────────────────────
+_ROOT = ""
+try:
+    if "--root" in sys.argv:
+        _ROOT = sys.argv[sys.argv.index("--root") + 1].rstrip("/")
+    elif "-r" in sys.argv:
+        _ROOT = sys.argv[sys.argv.index("-r") + 1].rstrip("/")
+except Exception:
+    pass
 
 # ── Version ──────────────────────────────────────────────────
 VERSION       = "1.0.0"
@@ -17,10 +28,10 @@ OS_NAME       = "Seven OS"
 GITHUB        = "https://github.com/haroldmth/sven"
 
 # ── Install Root (overridable via --root flag) ───────────────
-DEFAULT_ROOT  = "/"
+DEFAULT_ROOT  = _ROOT or "/"
 
 # ── Sven DB Paths ────────────────────────────────────────────
-DB_BASE       = "/var/lib/sven"
+DB_BASE       = f"{_ROOT}/var/lib/sven"
 DB_INSTALLED  = f"{DB_BASE}/installed"
 DB_SYNC       = f"{DB_BASE}/sync"
 DB_AUR_CACHE  = f"{DB_BASE}/aur_cache"
@@ -28,22 +39,22 @@ DB_SNAPSHOTS  = f"{DB_BASE}/snapshots"
 DB_LOCK       = f"{DB_BASE}/lock"
 
 # ── Cache ────────────────────────────────────────────────────
-CACHE_BASE    = "/var/cache/sven"
+CACHE_BASE    = f"{_ROOT}/var/cache/sven"
 CACHE_PKGS    = f"{CACHE_BASE}/pkgs"
 CACHE_AUR     = f"{CACHE_BASE}/aur"
 
 # ── Logging ──────────────────────────────────────────────────
-LOG_DIR       = "/var/log/sven"
+LOG_DIR       = f"{_ROOT}/var/log/sven"
 LOG_MAIN      = f"{LOG_DIR}/sven.log"
 LOG_HOOKS     = f"{LOG_DIR}/hooks.log"
 
 # ── Config ───────────────────────────────────────────────────
-CONFIG_DIR    = "/etc/sven"
+CONFIG_DIR    = f"{_ROOT}/etc/sven"
 CONFIG_FILE   = f"{CONFIG_DIR}/sven.conf"
 INITSCRIPTS   = f"{CONFIG_DIR}/initscripts"
 
 # ── Temp / Build ─────────────────────────────────────────────
-TMP_BASE      = "/tmp/sven"
+TMP_BASE      = f"{_ROOT}/tmp/sven"
 TMP_AUR       = f"{TMP_BASE}/aur"
 TMP_BUILD     = f"{TMP_BASE}/build"
 
@@ -52,7 +63,7 @@ ARCH_REPOS    = ["core", "extra", "multilib"]
 ARCH_ARCH     = "x86_64"
 
 # ── Default Mirror ───────────────────────────────────────────
-DEFAULT_MIRROR         = "https://mirror.rackspace.com/archlinux"
+DEFAULT_MIRROR         = "https://geo.mirror.pkgbuild.com"
 ARCH_MIRROR_STATUS_URL = "https://archlinux.org/mirrors/status/json/"
 
 # ── Mirror DB URL Template ───────────────────────────────────
@@ -75,6 +86,7 @@ INSTALL_FILE   = ".INSTALL"
 MTREE_FILE     = ".MTREE"
 
 # ── Supported Init Systems ───────────────────────────────────
+# Seven OS uses SysVinit/OpenRC, so we filter systemd deps.
 INIT_SYSTEMD  = "systemd"
 INIT_SYSVINIT = "sysvinit"
 INIT_OPENRC   = "openrc"
@@ -86,7 +98,7 @@ DB_MAX_AGE_SECONDS = 86400   # 24 hours before stale warning
 # ── Download ─────────────────────────────────────────────────
 PARALLEL_DOWNLOADS  = 5
 DOWNLOAD_CHUNK_SIZE = 8192   # bytes
-DOWNLOAD_TIMEOUT    = 30     # seconds
+DOWNLOAD_TIMEOUT    = 60     # seconds
 MIRROR_BENCH_COUNT  = 5      # mirrors to benchmark
 
 # ── Security ─────────────────────────────────────────────────

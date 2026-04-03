@@ -115,9 +115,11 @@ class MirrorTimeoutError(DownloadError):
 
 class ChecksumMismatchError(DownloadError):
     """SHA256 checksum does not match."""
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, expected: str, actual: str):
         self.filename = filename
-        super().__init__(f"Checksum mismatch: {filename} may be corrupt")
+        self.expected = expected
+        self.actual   = actual
+        super().__init__(f"Checksum mismatch for {filename}\n         Expected: {expected}\n         Actual:   {actual}")
 
 class SignatureError(DownloadError):
     """GPG signature verification failed."""
@@ -299,5 +301,18 @@ class ABIIncompatibleError(SvenError):
         self.host_glibc      = host_glibc
         super().__init__(
             f"ABI incompatible: '{pkg}' requires glibc >= {required_glibc}, "
-            f"but host has {host_glibc}. Build from source instead."
+            + f"but host has {host_glibc}. Build from source instead."
         )
+
+
+class ProtectedPackageError(SvenError):
+    """Attempted to manage a protected LFS package."""
+    def __init__(self, pkg_name: str):
+        self.pkg_name = pkg_name
+        super().__init__(
+            f"✗  {pkg_name} is a protected LFS package.\n"
+            f"   Sven will not manage this package automatically.\n"
+            f"   To override: sven install {pkg_name} --force-protected\n"
+            f"   WARNING: This may break your system."
+        )
+

@@ -8,8 +8,12 @@ import os
 import time
 import json
 import fcntl
+import logging
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger("sven")
+
 
 from .models import Package
 from ..constants import DB_INSTALLED, DB_LOCK
@@ -37,17 +41,21 @@ class LocalDB:
 
     def __init__(
         self,
-        db_path  : str = DB_INSTALLED,
-        lock_path: str = DB_LOCK,
+        db_path   = None,
+        lock_path = None,
     ):
-        self.db_path   = Path(db_path)
-        self.lock_path = Path(lock_path)
+        from .. import constants as C
+        logger.debug(f"LocalDB.__init__: root is {db_path or C.DB_INSTALLED}")
+        self.db_path   = Path(db_path or C.DB_INSTALLED)
+        self.lock_path = Path(lock_path or C.DB_LOCK)
         self.db_path.mkdir(parents=True, exist_ok=True)
 
         self._lock_fd = None
 
         # In-memory cache: name → Package
         self._cache : dict[str, Package] = {}
+        # Provides map: virtual → real package name
+        self._provides : dict[str, str] = {}
         self._loaded = False
 
     # ── Lock ──────────────────────────────────────────────────
@@ -63,6 +71,7 @@ class LocalDB:
             fcntl.flock(self._lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             self._lock_fd.write(str(os.getpid()))
             self._lock_fd.flush()
+            return True
         except BlockingIOError:
             raise DatabaseLockError(
                 "Another Sven process is already running.\n"
@@ -86,6 +95,7 @@ class LocalDB:
     def load(self):
         """Load all installed packages into memory."""
         self._cache.clear()
+        self._provides.clear()
         for pkg_dir in self.db_path.iterdir():
             if not pkg_dir.is_dir():
                 continue
@@ -93,6 +103,10 @@ class LocalDB:
                 pkg = self._read_pkg_dir(pkg_dir)
                 if pkg:
                     self._cache[pkg.name] = pkg
+                    # Index provides
+                    for prov in pkg.provides:
+                        virt = prov.split("=")[0].split(">")[0].split("<")[0]
+                        self._provides[virt.strip()] = pkg.name
             except Exception:
                 # Skip corrupt entries silently
                 pass
@@ -136,13 +150,25 @@ class LocalDB:
     # ── Query ─────────────────────────────────────────────────
 
     def get(self, name: str) -> Optional[Package]:
-        """Get an installed package by name. Returns None if not installed."""
+        """Get an installed package by name (or virtual). Returns None if not installed."""
         if not self._loaded:
             self.load()
-        return self._cache.get(name)
+        if name in self._cache:
+            return self._cache[name]
+        # Resolve as virtual
+        real = self._provides.get(name)
+        if real:
+            return self._cache.get(real)
+        return None
 
     def is_installed(self, name: str) -> bool:
         return self.get(name) is not None
+
+    def has(self, name: str) -> bool:
+        return self.is_installed(name)
+
+    def list_installed(self) -> list[str]:
+        return [p.name for p in self.all_packages()]
 
     def get_version(self, name: str) -> Optional[str]:
         pkg = self.get(name)
@@ -185,6 +211,24 @@ class LocalDB:
             p for p in self.auto_packages()
             if p.name not in all_deps
         ]
+
+    def unregister(self, name: str):
+        """Remove a package from the database."""
+        if not self.is_installed(name):
+            return
+            
+        pkg = self._cache.pop(name)
+        pkg_dir = self.db_path / pkg.full_name
+        
+        if pkg_dir.exists():
+            shutil.rmtree(pkg_dir)
+
+    def remove(self, name: str):
+        self.unregister(name)
+
+    def install_package(self, name: str, version: str, desc: str, url: str, files: list[str], reason: str = "depend"):
+        pkg = Package(name=name, version=version, desc=desc, url=url, origin=reason)
+        self.register(pkg, files, explicit=(reason == "explicit"))
 
     def get_files(self, name: str) -> list[str]:
         """Return list of files owned by a package."""

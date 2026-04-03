@@ -61,12 +61,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_install.add_argument("packages", nargs="+", metavar="PKG")
     p_install.add_argument("--source", action="store_true", help="Force build from source")
     p_install.add_argument("--binary", action="store_true", help="Force binary install")
+    p_install.add_argument("--force-protected", action="store_true", help="Allow managing protected LFS packages")
 
     # ── remove ────────────────────────────────────────────────
     p_remove = subparsers.add_parser("remove", help="Remove packages")
     p_remove.add_argument("packages", nargs="+", metavar="PKG")
     p_remove.add_argument("-s", action="store_true", help="Remove unneeded dependencies")
     p_remove.add_argument("--orphans", action="store_true", help="Remove all orphans")
+    p_remove.add_argument("--force-protected", action="store_true", help="Allow removing protected LFS packages")
 
     # ── upgrade ───────────────────────────────────────────────
     p_upgrade = subparsers.add_parser("upgrade", help="Upgrade packages")
@@ -76,6 +78,8 @@ def build_parser() -> argparse.ArgumentParser:
                            help="Skip these packages")
     p_upgrade.add_argument("--devel", action="store_true",
                            help="Also rebuild -git AUR packages")
+    p_upgrade.add_argument("--force-protected", action="store_true", help="Allow upgrading protected LFS packages")
+
 
     # ── update ────────────────────────────────────────────────
     subparsers.add_parser("update", help="Sync databases + full upgrade")
@@ -155,29 +159,18 @@ def main():
     parser  = build_parser()
     args    = parser.parse_args()
 
-    # Apply --root override to config AND constants
+    # ── Configure Logging ─────────────────────────────────────
+    import logging
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG, format='\033[90mDEBUG: %(message)s\033[0m')
+    else:
+        logging.basicConfig(level=logging.WARNING)
+
+    # constants.py natively captures --root from sys.argv at module load time.
+    # We only need to sync the Config singleton.
     if args.root:
-        import os
-        from . import constants as C
-        root = args.root.rstrip("/")
-        C.DB_BASE      = os.path.join(root, C.DB_BASE.lstrip("/"))
-        C.DB_INSTALLED = os.path.join(root, C.DB_INSTALLED.lstrip("/"))
-        C.DB_SYNC      = os.path.join(root, C.DB_SYNC.lstrip("/"))
-        C.DB_AUR_CACHE = os.path.join(root, C.DB_AUR_CACHE.lstrip("/"))
-        C.DB_SNAPSHOTS = os.path.join(root, C.DB_SNAPSHOTS.lstrip("/"))
-        C.DB_LOCK      = os.path.join(root, C.DB_LOCK.lstrip("/"))
-        C.CACHE_BASE   = os.path.join(root, C.CACHE_BASE.lstrip("/"))
-        C.CACHE_PKGS   = os.path.join(root, C.CACHE_PKGS.lstrip("/"))
-        C.CACHE_AUR    = os.path.join(root, C.CACHE_AUR.lstrip("/"))
-        C.LOG_DIR      = os.path.join(root, C.LOG_DIR.lstrip("/"))
-        C.LOG_MAIN     = os.path.join(root, C.LOG_MAIN.lstrip("/"))
-        C.LOG_HOOKS    = os.path.join(root, C.LOG_HOOKS.lstrip("/"))
-        C.CONFIG_DIR   = os.path.join(root, C.CONFIG_DIR.lstrip("/"))
-        C.CONFIG_FILE  = os.path.join(root, C.CONFIG_FILE.lstrip("/"))
-        C.INITSCRIPTS  = os.path.join(root, C.INITSCRIPTS.lstrip("/"))
-        C.TMP_BASE     = os.path.join(root, C.TMP_BASE.lstrip("/"))
-        C.TMP_AUR      = os.path.join(root, C.TMP_AUR.lstrip("/"))
-        C.TMP_BUILD    = os.path.join(root, C.TMP_BUILD.lstrip("/"))
+        from .config import get_config
+        get_config().install_root = args.root
 
     if args.command is None:
         if not (hasattr(args, "no_color") and args.no_color):
@@ -196,13 +189,22 @@ def main():
 
     if cmd == "install":
         from .commands.install import run
-        run(args.packages, args.root if hasattr(args, 'root') else None)
+        run(
+            args.packages, 
+            root=args.root if hasattr(args, 'root') else None,
+            force_protected=args.force_protected
+        )
     elif cmd == "remove":
         from .commands.remove import run
-        run(args.packages, recursive=args.orphans if hasattr(args, "orphans") else False)
+        run(
+            args.packages, 
+            recursive=args.orphans if hasattr(args, "orphans") else False,
+            force_protected=args.force_protected
+        )
     elif cmd == "upgrade":
         from .commands.upgrade import run
-        run(args.packages)
+        run(args.packages, force_protected=args.force_protected)
+
     elif cmd == "update":
         from .commands.update import run
         run()

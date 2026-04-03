@@ -38,8 +38,18 @@ class MirrorManager:
         # Ranked list — fastest first
         self._mirrors: list[dict] = []
         self._current_index: int = 0
+    @property
+    def mirrors(self) -> list[dict]:
+        """Expose the internal ranked mirror list."""
+        if not self._mirrors:
+            self._load_cached()
+        if not self._mirrors:
+            self._mirrors = self.fetch_mirror_list()
+            self._save_cached(self._mirrors)
+        return self._mirrors
 
     # ── Public API ───────────────────────────────────────────
+
 
     @property
     def current(self) -> str:

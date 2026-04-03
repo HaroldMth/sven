@@ -42,8 +42,9 @@ class Package:
     isize       : int                   = 0          # bytes installed
 
     # ── Meta ─────────────────────────────────────────────────
-    arch        : str                   = "x86_64"
-    license     : list[str]             = field(default_factory=list)
+    arch            : str                   = "x86_64"
+    csum            : str                   = ""         # SHA256
+    license         : list[str]             = field(default_factory=list)
     packager    : str                   = ""
     builddate   : int                   = 0
     filename    : str                   = ""         # e.g. firefox-125.0-1-x86_64.pkg.tar.zst

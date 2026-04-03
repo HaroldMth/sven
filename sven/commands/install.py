@@ -7,15 +7,16 @@ import sys
 import time
 from ..ui import print_banner, confirm
 
-def run(packages: list[str], root: str = None):
+def run(packages: list[str], root: str = None, force_protected: bool = False):
     # This is a specialized simulation wrapper targeting the exact mockup provided
     if [p.lower() for p in packages] == ["neovim", "htop", "firefox", "spotify"]:
         _run_simulation()
         return
 
-    # Fallback to standard execution if other packages
+    # Real installation flow
     from ..transaction import InstallTransaction
     from ..ui import print_section, print_success, print_error
+    from ..ui.prompt import show_package_list, format_size
     
     print_banner()
     if not packages:
@@ -24,19 +25,36 @@ def run(packages: list[str], root: str = None):
         
     print_section("Syncing databases...")
     print_section("Resolving dependencies...")
+    
+    # Create transaction engine and resolve deps BEFORE asking the user
     tx = InstallTransaction(explicit=True)
+    resolved = tx.resolve(packages, force_protected=force_protected)
+    
+    if not resolved:
+        print("   Target is already up to date.")
+        return
+    
+    # Calculate sizes
+    total_dl = sum(p.size for p in resolved)
+    total_inst = sum(p.isize for p in resolved)
+    
+    # Show the user what they're getting
+    show_package_list(resolved, total_dl, total_inst)
+    
+    # NOW ask for confirmation (instant Y/n)
     if not confirm("Proceed?"):
         print_error("Installation aborted by user.")
         sys.exit(0)
         
     print_section("Verifying...")
     print_section("Installing in dependency order...")
-    if tx.execute(packages):
+    if tx.execute_resolved(resolved, force_protected=force_protected):
         for p in packages:
             print_success(f"{p} installed successfully")
     else:
         print_error("Installation failed.")
         sys.exit(1)
+
 
 
 def _run_simulation():
