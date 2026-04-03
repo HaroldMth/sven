@@ -138,8 +138,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_rdeps = subparsers.add_parser("rdeps", help="Show reverse dependencies")
     p_rdeps.add_argument("package", metavar="PKG")
 
-    # ── self-update ───────────────────────────────────────────
-    subparsers.add_parser("self-update", help="Update Sven to the latest GitHub release")
+    # ── update ────────────────────────────────────────────────
+    subparsers.add_parser("check-update", help="Check for a newer version of Sven")
+    subparsers.add_parser("self-update",  help="Download and install latest Sven release")
 
     return parser
 
@@ -182,6 +183,12 @@ def main():
             print(LARGE_BANNER.replace("\033[94m", "").replace("\033[0m", ""))
         parser.print_help()
         sys.exit(0)
+
+    # ── Automagic Update Check ────────────────────────────────
+    # We do not check on self-update or check-update commands to avoid redundancy
+    if args.command not in ("self-update", "check-update"):
+        from .core.updater import check_for_updates_silently
+        check_for_updates_silently()
 
     # ── Route to command handlers (stubs for now) ─────────────
     cmd = args.command
@@ -244,6 +251,9 @@ def main():
     elif cmd == "self-update":
         from .commands.self_update import run
         run()
+    elif cmd == "check-update":
+        from .core.updater import run_check_update
+        run_check_update()
     elif cmd in ("deps", "rdeps"):
         from .commands.deps import run
         run(args.package, reverse=(cmd == "rdeps"))

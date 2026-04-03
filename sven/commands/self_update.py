@@ -14,10 +14,6 @@ from ..ui.output import print_section, print_success, print_error, print_info
 from ..constants import VERSION
 from ..ui.prompt import confirm
 
-# Github repo endpoint
-REPO_LATEST_API = "https://api.github.com/repos/haroldmth/sven/releases/latest"
-ASSET_NAME = "sven-linux-x86_64"
-
 def run():
     print_section("Checking for Sven Auto-Updates")
     
@@ -27,18 +23,13 @@ def run():
         print("   Try: sudo sven self-update")
         sys.exit(1)
 
+    from ..core.updater import get_latest_version
+    
     print_info("Contacting GitHub API...")
-    try:
-        resp = requests.get(REPO_LATEST_API, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        print_error(f"Failed to check for updates: {e}")
-        sys.exit(1)
+    latest_tag, download_url = get_latest_version(force=True)
 
-    latest_tag = data.get("tag_name", "").lstrip("v")
     if not latest_tag:
-        print_error("Failed to parse latest version from GitHub.")
+        print_error("Failed to reach GitHub. Check your internet connection.")
         sys.exit(1)
 
     print(f"   Current Version  :  {VERSION}")
@@ -47,13 +38,6 @@ def run():
     if latest_tag == VERSION:
         print_success("Sven is already fully up to date.")
         sys.exit(0)
-
-    # Find the binary asset URL
-    download_url = None
-    for asset in data.get("assets", []):
-        if asset.get("name") == ASSET_NAME:
-            download_url = asset.get("browser_download_url")
-            break
 
     if not download_url:
         print_error("Release exists, but Linux standalone binary was not found in assets.")
