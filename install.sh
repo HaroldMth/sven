@@ -1,98 +1,124 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # ============================================================
-#  Sven — Seven OS Package Manager
+#  Sven — Seven OS Installer
 #  HANS TECH © 2024 — GPL v3
-#  install.sh — one liner installer
-#  Usage: curl -fsSL https://sevenOS.dev/install-sven.sh | bash
+#  scripts/install.sh — The foolproof installer for Sven
 # ============================================================
 
 set -e
 
-REPO="https://github.com/haroldmth/sven"
-BINARY_URL="$REPO/releases/latest/download/sven-x86_64-linux"
-INSTALL_PATH="/usr/local/bin/sven"
-DB_DIRS=(
-    "/var/lib/sven/installed"
-    "/var/lib/sven/sync"
-    "/var/lib/sven/aur_cache"
-    "/var/lib/sven/snapshots"
-    "/var/cache/sven/pkgs"
-    "/var/cache/sven/aur"
-    "/var/log/sven"
-    "/etc/sven/initscripts"
-    "/tmp/sven/aur"
-)
+# ── Colors ───────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
 
+info()  { echo -e "${CYAN}[sven]${NC} $1"; }
+ok()    { echo -e "${GREEN}[  ✓ ]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[ !! ]${NC} $1"; }
+fail()  { echo -e "${RED}[FAIL]${NC} $1"; exit 1; }
+
+# ── Header ───────────────────────────────────────────────────
 echo ""
-echo "╔══════════════════════════════════════════╗"
-echo "║   Installing Sven — Seven OS pkg manager  ║"
-echo "║   by HANS TECH                            ║"
-echo "╚══════════════════════════════════════════╝"
+echo "  ╔══════════════════════════════════════════════════╗"
+echo "  ║                                                  ║"
+echo "  ║   Sven Package Manager Installer - Seven OS      ║"
+echo "  ║           HANS TECH © 2024 - v1.0.0              ║"
+echo "  ║                                                  ║"
+echo "  ╚══════════════════════════════════════════════════╝"
 echo ""
 
-# ── Check root ───────────────────────────────────────────────
-if [ "$EUID" -ne 0 ]; then
-    echo "✗  Please run as root"
-    exit 1
+# ── Root Check ───────────────────────────────────────────────
+if [ "$(id -u)" -ne 0 ]; then
+    fail "Installer must be run with root privileges (sudo)."
 fi
 
-# ── Download binary ──────────────────────────────────────────
-echo ":: Downloading sven binary..."
-curl -fsSL "$BINARY_URL" -o "$INSTALL_PATH"
-chmod +x "$INSTALL_PATH"
-echo "   → installed to $INSTALL_PATH"
+# ── Dependency Check ─────────────────────────────────────────
+info "Verifying system prerequisites..."
 
-# ── Create directory structure ───────────────────────────────
-echo ":: Creating directory structure..."
-for dir in "${DB_DIRS[@]}"; do
-    mkdir -p "$dir"
-done
-echo "   → done"
+CHECK_FAILED=0
 
-# ── Write default config ─────────────────────────────────────
-if [ ! -f /etc/sven/sven.conf ]; then
-    echo ":: Writing default config → /etc/sven/sven.conf"
-    cat > /etc/sven/sven.conf << 'EOF'
-[general]
-install_root      = /
-cache_dir         = /var/cache/sven
-db_path           = /var/lib/sven
-init_system       = sysvinit
+check_tool() {
+    if command -v "$1" &> /dev/null; then
+        ok "$1 found"
+    else
+        warn "$1 and required dependencies NOT found."
+        echo "      -> Required for: $2"
+        echo "      -> LFS/BLFS Chapter: $3"
+        CHECK_FAILED=1
+    fi
+}
 
-[repos]
-use_official      = true
-use_aur           = true
-aur_review        = prompt
+check_tool "python3" "Sven Runtime Engine" "LFS 9.4"
+check_tool "tar" "Package Extraction" "LFS 9.4"
+check_tool "zstd" "Archive Decompression" "LFS 9.4"
+check_tool "gpg" "Security Verification" "BLFS 9.6"
+check_tool "git" "AUR Integration" "BLFS 12.1"
+check_tool "fakeroot" "Safe Package Assembly" "BLFS (General)"
+check_tool "sudo" "Privileged Operations" "BLFS 15.3"
 
-[build]
-parallel_jobs     = 4
-keep_cache        = true
-
-[download]
-parallel_downloads = 5
-mirror             = auto
-
-[upgrade]
-ignored_packages  =
-held_packages     =
-EOF
-EOF
+if [ $CHECK_FAILED -eq 1 ]; then
+    echo ""
+    fail "System check failed. Please install the missing tool(s) from LFS/BLFS before continuing."
 fi
 
-# ── Install built-in initscripts ─────────────────────────────
-echo ":: Installing built-in initscripts..."
-for script in bluetooth dbus lightdm networkmanager pulseaudio sddm; do
-    echo "   → $script"
-    curl -fsSL "https://raw.githubusercontent.com/haroldmth/sven/main/initscripts/$script" -o "/etc/sven/initscripts/$script"
-    chmod +x "/etc/sven/initscripts/$script"
-done
+# ── Directory Setup ──────────────────────────────────────────
+info "Creating system directory structure..."
+mkdir -p /etc/sven
+mkdir -p /var/lib/sven/sync
+mkdir -p /var/lib/sven/installed
+mkdir -p /var/lib/sven/snapshots
+mkdir -p /var/cache/sven/pkgs
+mkdir -p /var/log/sven
+ok "Directories ready."
+
+# ── Binary Placement ─────────────────────────────────────────
+info "Deploying Sven executable..."
+if [ -f "dist/sven" ]; then
+    cp -v dist/sven /usr/bin/sven
+elif [ -f "./sven" ]; then
+    cp -v ./sven /usr/bin/sven
+else
+    info "Binary not found locally. Attempting GitHub download..."
+    LATEST_URL="https://github.com/haroldmth/sven/releases/latest/download/sven-linux-x86_64"
+    if command -v wget &> /dev/null; then
+        wget -q --show-progress "$LATEST_URL" -O /usr/bin/sven
+    elif command -v curl &> /dev/null; then
+        curl -L "$LATEST_URL" -o /usr/bin/sven
+    else
+        fail "Neither wget nor curl found. Cannot download binary."
+    fi
+fi
+
+chmod +x /usr/bin/sven
+ok "Sven binary installed to /usr/bin/sven"
+
+# ── Adoption ─────────────────────────────────────────────────
+info "Running Seven OS Adoption scripts..."
+
+# Determine script locations
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+
+if [ -f "$SCRIPT_DIR/adopt_lfs.py" ]; then
+    # We need to set PYTHONPATH because the python module is not in site-packages
+    SVEN_MODULE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+    PYTHONPATH="$SVEN_MODULE_DIR" python3 "$SCRIPT_DIR/adopt_lfs.py"
+    PYTHONPATH="$SVEN_MODULE_DIR" python3 "$SCRIPT_DIR/adopt_blfs.py"
+else
+    warn "Adoption scripts not found in $SCRIPT_DIR. Skipping initial adoption."
+    echo "      Manual adoption recommended: sven search base --adopt"
+fi
+
+ok "System adoption complete."
+
+# ── Finalize ─────────────────────────────────────────────────
+info "Refreshing sync databases..."
+sven sync || warn "Failed to sync. Please check network connection later."
 
 echo ""
-echo "✓  Sven installed successfully!"
-echo ""
-echo "   Get started:"
-echo "   → sven sync"
-echo "   → sven install firefox"
-echo ""
-echo "   Docs: $REPO"
+ok "Sven installation finished successfully."
+info "Next Steps:"
+echo "    - Run 'sven list --explicit' to see your adopted system."
+echo "    - Try 'sven search python' to test repo connectivity."
 echo ""
