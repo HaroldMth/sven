@@ -13,3 +13,4 @@ venv/
 docs/
 sven_system/
 *.zip
+sven_chroot/

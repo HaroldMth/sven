@@ -138,6 +138,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_rdeps = subparsers.add_parser("rdeps", help="Show reverse dependencies")
     p_rdeps.add_argument("package", metavar="PKG")
 
+    # ── self-update ───────────────────────────────────────────
+    subparsers.add_parser("self-update", help="Update Sven to the latest GitHub release")
+
     return parser
 
 
@@ -238,6 +241,9 @@ def main():
     elif cmd == "mirror":
         from .commands.mirror import run
         run(benchmark=(args.mirror_cmd == "fastest" if hasattr(args, "mirror_cmd") else False))
+    elif cmd == "self-update":
+        from .commands.self_update import run
+        run()
     elif cmd in ("deps", "rdeps"):
         from .commands.deps import run
         run(args.package, reverse=(cmd == "rdeps"))
