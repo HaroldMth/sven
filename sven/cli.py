@@ -50,8 +50,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable colored output"
     )
     parser.add_argument(
-        "--verbose", action="store_true",
-        help="Show detailed output"
+        "--verbose",
+        action="store_true",
+        dest="global_verbose",
+        help="Verbose logging for any command (must come *before* the subcommand, e.g. sven --verbose sync)",
     )
 
     subparsers = parser.add_subparsers(dest="command", metavar="<command>")
@@ -59,6 +61,13 @@ def build_parser() -> argparse.ArgumentParser:
     # ── install ───────────────────────────────────────────────
     p_install = subparsers.add_parser("install", help="Install packages")
     p_install.add_argument("packages", nargs="+", metavar="PKG")
+    p_install.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        dest="install_verbose",
+        help="Verbose install output (may appear after package names)",
+    )
     p_install.add_argument("--source", action="store_true", help="Force build from source")
     p_install.add_argument("--binary", action="store_true", help="Force binary install")
     p_install.add_argument("--force-protected", action="store_true", help="Allow managing protected LFS packages")
@@ -145,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-LARGE_BANNER = """\033[94m╔══════════════════════════════════════════════════╗
+LARGE_BANNER = f"""\033[94m╔══════════════════════════════════════════════════╗
 ║                                                  ║
 ║   ███████╗██╗   ██╗███████╗███╗   ██╗            ║
 ║   ██╔════╝██║   ██║██╔════╝████╗  ██║            ║
@@ -154,19 +163,23 @@ LARGE_BANNER = """\033[94m╔═════════════════
 ║   ███████║ ╚████╔╝ ███████╗██║ ╚████║            ║
 ║   ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝            ║
 ║                                                  ║
-║   v1.0.0  ·  Seven OS Package Manager            ║
-║   by HANS TECH                                   ║
+║   v{VERSION}  ·  Seven OS Package Manager            ║
+║   by {BRAND}                                   ║
 ╚══════════════════════════════════════════════════╝\033[0m
 """
 
 def main():
-    parser  = build_parser()
-    args    = parser.parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+
+    verbose = bool(
+        getattr(args, "global_verbose", False) or getattr(args, "install_verbose", False)
+    )
 
     # ── Configure Logging ─────────────────────────────────────
     import logging
-    if args.verbose:
-        logging.basicConfig(level=logging.DEBUG, format='\033[90mDEBUG: %(message)s\033[0m')
+    if verbose:
+        logging.basicConfig(level=logging.DEBUG, format="\033[90mDEBUG: %(message)s\033[0m")
     else:
         logging.basicConfig(level=logging.WARNING)
 
@@ -200,9 +213,10 @@ def main():
     if cmd == "install":
         from .commands.install import run
         run(
-            args.packages, 
-            root=args.root if hasattr(args, 'root') else None,
-            force_protected=args.force_protected
+            args.packages,
+            root=args.root if hasattr(args, "root") else None,
+            force_protected=args.force_protected,
+            verbose=verbose,
         )
     elif cmd == "remove":
         from .commands.remove import run

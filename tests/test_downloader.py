@@ -135,8 +135,8 @@ class TestPKGBUILDFetcher(unittest.TestCase):
             mock_run.assert_called_once()
             call_args = mock_run.call_args[0][0]
             self.assertEqual(call_args[0], "git")
-            self.assertEqual(call_args[1], "clone")
-            self.assertIn("spotify", call_args[3])
+            self.assertIn("clone", call_args)
+            self.assertIn("spotify", call_args[-1])
             self.assertEqual(result, dest)
 
 

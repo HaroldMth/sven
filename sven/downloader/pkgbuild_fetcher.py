@@ -14,6 +14,11 @@ from ..constants import (
     TMP_AUR,
 )
 from ..exceptions import AURError, BuildError
+from ..ssl_bundle import (
+    git_ssl_config_args,
+    git_subprocess_environ,
+    ssl_failure_hint,
+)
 
 
 class PKGBUILDFetcher:
@@ -79,16 +84,19 @@ class PKGBUILDFetcher:
 
         try:
             result = subprocess.run(
-                ["git", "clone", "--depth=1", url, str(dest)],
+                ["git", *git_ssl_config_args(), "clone", "--depth=1", url, str(dest)],
                 capture_output=True,
                 text=True,
                 timeout=300,
+                env=git_subprocess_environ(),
             )
             if result.returncode != 0:
-                raise BuildError(
-                    pkg_name,
-                    f"git clone failed:\n{result.stderr.strip()}"
-                )
+                err = result.stderr.strip() or result.stdout.strip() or "(no stderr)"
+                extra = ""
+                low = err.lower()
+                if "certificate" in low or "ssl" in low or "issuer" in low:
+                    extra = "\n\n" + ssl_failure_hint()
+                raise BuildError(pkg_name, f"git clone failed:\n{err}{extra}")
         except FileNotFoundError:
             raise BuildError(pkg_name, "git is not installed")
         except subprocess.TimeoutExpired:
@@ -115,10 +123,11 @@ class PKGBUILDFetcher:
         print(f"   Updating {pkg_name}...")
         try:
             result = subprocess.run(
-                ["git", "-C", str(dest), "pull", "--ff-only"],
+                ["git", *git_ssl_config_args(), "-C", str(dest), "pull", "--ff-only"],
                 capture_output=True,
                 text=True,
                 timeout=300,
+                env=git_subprocess_environ(),
             )
             if result.returncode != 0:
                 # Pull failed — try a fresh clone

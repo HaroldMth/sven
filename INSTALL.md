@@ -1,6 +1,8 @@
-# Sven Installation Guide (Enterprise LFS Edition)
+# Sven Installation Guide (Enterprise LFS Edition) 🦁🏁
 
 This document provides a comprehensive, professional guide to deploying Sven onto your **Seven OS** or **Linux From Scratch (LFS)** distribution.
+
+---
 
 ## 1. System Dependency Table (Prerequisites)
 
@@ -17,6 +19,8 @@ Before installing Sven, your base LFS system must provide the following core too
 | `sudo` | Permission elevation | BLFS 15.3 | Used for atomic filesystem merges |
 | `wget` | Asset fetching | BLFS 12.7 | Required for initial bootstrap/self-update |
 
+---
+
 ## 2. Automated One-Command Installation (Recommended)
 
 The easiest way to install Sven on Seven OS is by using our **Foolproof Bootstrap Script**. This script checks every dependency, creates the necessary directories, and automatically "adopts" your system (registers your LFS base into the Sven database).
@@ -24,7 +28,8 @@ The easiest way to install Sven on Seven OS is by using our **Foolproof Bootstra
 Run this directly from the repository source:
 
 ```bash
-sudo bash scripts/install.sh
+# Inside the Seven OS host/chroot
+sudo bash install.sh
 ```
 
 ### What the installer does:
@@ -32,6 +37,8 @@ sudo bash scripts/install.sh
 2. **Directory Hardening**: It creates `/etc/sven`, `/var/lib/sven`, and the logging/caching folders with standard permissions.
 3. **Standalone Deployment**: It places the static binary (built with static C-libs) into `/usr/bin/sven`.
 4. **LFS Adoption**: It executes the adoption scripts to ensure Sven knows NOT to overwrite your core system files (e.g., `glibc`, `bash`).
+
+---
 
 ## 3. Manual Installation (For LFS Purists)
 
@@ -61,35 +68,64 @@ python3 scripts/adopt_lfs.py
 python3 scripts/adopt_blfs.py
 ```
 
-## 4. Advanced: Building Requirements from Source (BLFS)
+---
 
-If you find that your LFS build is missing `zstd` support or `fakeroot`, follow these official build patterns:
+## 4. Troubleshooting Connectivity (Flaky/Trash Networks)
 
-### Adding Zstd Support directly into Tar
-If `tar --version` does not list `zstd` as a capability, you must recompile `tar` against the `zstd` library:
+If you are operating on a high-latency or unstable connection (e.g., 30%+ packet loss), Sven includes a **Zero-Trust Downloader** with built-in resilience. You can further tune your environment in `sven/constants.py`:
+
+- **Timeouts**: Increase `DOWNLOAD_TIMEOUT` (default: 120s) if mirrors are timing out.
+- **Parallelism**: Decrease `PARALLEL_DOWNLOADS` (default: 3) to reduce connection overhead on lossy links.
+- **Failover**: Sven automatically attempts up to **10 different mirrors** per package if a checksum mismatch or connection error occurs.
+
+---
+
+## 5. Development Mode (Source-Linking)
+
+If you are a Seven OS core developer and want to test Sven changes instantly without rebuilding the binary, you can "link" your source folder to the system's `/usr/bin/sven` entry point.
+
+**On the Host/Chroot:**
 ```bash
-# Inside tar source directory
-./configure --prefix=/usr --bindir=/bin --with-zstd
-make && make install
+# 1. Back up the existing binary
+sudo mv /usr/bin/sven /usr/bin/sven.bin
+
+# 2. Create a development launcher script
+sudo tee /usr/bin/sven << 'EOF'
+#!/bin/bash
+export PYTHONPATH="/home/harold/Desktop/sven"
+python3 "/home/harold/Desktop/sven/run_sven.py" "$@"
+EOF
+
+# 3. Mark as executable
+sudo chmod +x /usr/bin/sven
+```
+Now, any change you make to the `.py` files in your git repository will be **immediately live** in your Seven OS shell!
+
+---
+
+## 6. Architecture Overview (The LFS Bridge)
+
+```text
+  [ ARCH REPOS ] <────> [ SVEN DOWNLOADER ] <────> [ SVEN INSTALLER ]
+    (Official)           (Parallel/Failover)         (Atomic Merge)
+                                 │                         │
+                                 ▼                         ▼
+  [ AUR ENGINE ] <─────> [ MAKEPKG CHROOT ] <─────> [ SEVEN OS / LFS ]
+    (Source)              (Safe Sandbox)             (Final Binary)
+                                                           │
+                                                           ▼
+                                                    [ SYSVINIT RUNTIME ]
 ```
 
-### Building Fakeroot (Required for AUR)
-Fakeroot allows `makepkg` to assume root privileges for ownership assignment without actual risks:
-```bash
-wget http://ftp.debian.org/debian/pool/main/f/fakeroot/fakeroot_1.24.orig.tar.gz
-# Standard build: ./configure --prefix=/usr && make && sudo make install
-```
+---
 
-## 5. Post-Install Verification
-Confirm Sven is operational and honors your Seven OS core:
-```bash
-sven list --explicit
-```
-Every core tool (like `grep`, `sed`, `perl`) should be listed as `LFS-BASE`.
+## 7. Uninstallation
 
-## 6. Uninstallation
 To completely remove Sven from your system without touching your LFS base:
 ```bash
-sudo rm -rf /usr/bin/sven /etc/sven /var/lib/sven /var/cache/sven /var/log/sven
+sudo rm -rf /usr/bin/sven /usr/bin/sven.bin /etc/sven /var/lib/sven /var/cache/sven /var/log/sven
 ```
-Caution: This will delete your Sven package databases and rollbacks, but won't touch your manually installed software.
+*Note: This will delete your Sven package databases and rollbacks, but won't touch your manually installed software.*
+
+Developed with passion by **HANS TECH © 2024**. 🦁🏁
+🏁 *Sven: Speed, Stability, and the Freedom of LFS.* 🏁

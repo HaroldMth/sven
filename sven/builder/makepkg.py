@@ -18,6 +18,7 @@ from typing import Optional
 
 from ..config import get_config
 from ..exceptions import BuildError, RootBuildError
+from ..ssl_bundle import augment_env_with_ssl_certs
 from ..security.hook_scanner import (
     scan_pkgbuild_dir,
     prompt_hook_approval,
@@ -116,6 +117,7 @@ def run_makepkg(
     env = os.environ.copy()
     env["MAKEFLAGS"] = makeflags
     env["PKGDEST"] = str(pkg_path)  # Output package to same dir
+    augment_env_with_ssl_certs(env)
 
     # ── Root check + privilege drop ──
     if _is_root():
@@ -130,7 +132,12 @@ def run_makepkg(
             raise RootBuildError()
 
         # Wrap command with sudo -u
-        cmd = ["sudo", "-u", build_user, "--preserve-env=MAKEFLAGS,PKGDEST"] + cmd
+        cmd = [
+            "sudo",
+            "-u",
+            build_user,
+            "--preserve-env=MAKEFLAGS,PKGDEST,SSL_CERT_FILE,SSL_CERT_DIR,GIT_SSL_CAINFO,GIT_SSL_CAPATH,REQUESTS_CA_BUNDLE",
+        ] + cmd
 
     # ── Run the build ──
     print(f"\n   ╭{'─' * 50}╮")

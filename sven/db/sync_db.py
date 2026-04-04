@@ -150,22 +150,26 @@ class SyncDB:
         total = int(resp.headers.get("content-length", 0))
         downloaded = 0
         chunk_size = 8192
+        last_shown_pct = -1
 
         with open(dest, "wb") as f:
             for chunk in resp.iter_content(chunk_size=chunk_size):
                 f.write(chunk)
                 downloaded += len(chunk)
                 if total:
-                    pct = int(downloaded / total * 20)
-                    bar = "#" * pct + " " * (20 - pct)
-                    mb  = downloaded / 1_000_000
-                    print(
-                        f"\r   {repo}.db"
-                        f"  [{bar}]"
-                        f"  {mb:.1f} MiB",
-                        end="", flush=True
-                    )
-        print(f"  ✓")
+                    pct_bar = min(20, int(downloaded / total * 20))
+                    if pct_bar != last_shown_pct or downloaded >= total:
+                        last_shown_pct = pct_bar
+                        bar = "#" * pct_bar + "·" * (20 - pct_bar)
+                        mb = downloaded / 1_000_000
+                        total_mb = total / 1_000_000
+                        print(
+                            f"\r\033[2K   {repo}.db  [{bar}]  "
+                            f"{mb:.1f}/{total_mb:.1f} MiB",
+                            end="",
+                            flush=True,
+                        )
+        print(f"\r\033[2K   {repo}.db  ✓", flush=True)
 
     def _is_fresh(self, db_file: Path) -> bool:
         """Return True if the .db file exists and is less than 24h old."""

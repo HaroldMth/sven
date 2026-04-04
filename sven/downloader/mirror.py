@@ -5,10 +5,13 @@
 # ============================================================
 
 import json
+import logging
+import socket
 import time
 import requests
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from ..constants import (
     ARCH_MIRROR_STATUS_URL,
@@ -23,6 +26,72 @@ from ..exceptions import MirrorError, MirrorTimeoutError
 
 MIRROR_CACHE_FILE = f"{DB_BASE}/mirrors.json"
 MIRRORLIST_FILE   = f"{CONFIG_DIR}/mirrorlist"
+
+logger = logging.getLogger("sven")
+
+
+def _url_resolves_to_loopback(url: str) -> bool:
+    """
+    True if the mirror hostname resolves only to loopback (e.g. /etc/hosts typo).
+    Skips DNS failures — we do not drop mirrors we could not resolve here.
+    """
+    try:
+        host = urlparse(url).hostname
+    except Exception:
+        return False
+    if not host:
+        return False
+    h = host.lower()
+    if h in ("localhost", "127.0.0.1", "::1"):
+        return True
+    try:
+        infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        ip = info[4][0]
+        if ip not in ("127.0.0.1", "::1") and not ip.startswith("127."):
+            return False
+    return True
+
+
+def _strip_loopback_mirrors(
+    mirrors: list[dict],
+    *,
+    max_dns_check: int = 120,
+) -> list[dict]:
+    """
+    Remove mirrors whose host resolves only to 127.0.0.1 / ::1.
+    max_dns_check limits how many entries get a DNS lookup (full Arch list is huge).
+    """
+    if not mirrors:
+        return mirrors
+    head_n = min(max_dns_check, len(mirrors))
+    head, tail = mirrors[:head_n], mirrors[head_n:]
+    kept: list[dict] = []
+    dropped = 0
+    for m in head:
+        u = m.get("url") or ""
+        if _url_resolves_to_loopback(u):
+            dropped += 1
+            logger.warning("Dropping mirror (resolves to loopback): %s", u)
+            continue
+        kept.append(m)
+    out = kept + tail
+    if not out:
+        return [
+            {
+                "url": DEFAULT_MIRROR,
+                "country": "Default",
+                "score": 0,
+                "ping_ms": None,
+            }
+        ]
+    if dropped and not tail:
+        logger.info("Removed %d loopback mirror(s); using public mirrors.", dropped)
+    return out
 
 
 class MirrorManager:
@@ -39,6 +108,8 @@ class MirrorManager:
         self._mirrors: list[dict] = []
         self._current_index: int = 0
         self._blacklist: set[str] = set()
+        # Suppress mirror failover prints while parallel download UI owns the terminal
+        self._parallel_dl_depth: int = 0
 
     @property
     def mirrors(self) -> list[dict]:
@@ -68,6 +139,15 @@ class MirrorManager:
 
         return self._mirrors[self._current_index]["url"]
 
+    def begin_parallel_downloads(self) -> None:
+        self._parallel_dl_depth += 1
+
+    def end_parallel_downloads(self) -> None:
+        self._parallel_dl_depth = max(0, self._parallel_dl_depth - 1)
+
+    def _downloads_ui_active(self) -> bool:
+        return self._parallel_dl_depth > 0
+
     def next_mirror(self) -> str:
         """
         Advance to the next mirror in the ranked list.
@@ -81,14 +161,16 @@ class MirrorManager:
         if url in self._blacklist:
             return self.next_mirror() # recursive skip
             
-        print(f"   ⟳ Failing over to: {url}")
+        if not self._downloads_ui_active():
+            print(f"   ⟳ Failing over to: {url}")
         return url
 
     def blacklist_current(self):
         """Mark the current mirror as unreliable for this session."""
         url = self.current
         if url not in self._blacklist:
-            print(f"   ⚠ Blacklisting unreliable mirror: {url}")
+            if not self._downloads_ui_active():
+                print(f"   ⚠ Blacklisting unreliable mirror: {url}")
             self._blacklist.add(url)
 
     def reset(self):
@@ -172,7 +254,7 @@ class MirrorManager:
         except OSError:
             pass
 
-        return mirrors
+        return _strip_loopback_mirrors(mirrors)
 
     # ── Benchmark ────────────────────────────────────────────
 
@@ -209,8 +291,8 @@ class MirrorManager:
         # Sort by ping
         results.sort(key=lambda m: m["ping_ms"])
 
-        # Take top N
-        best = results[:count]
+        # Take top N (re-check loopback in case list / DNS changed)
+        best = _strip_loopback_mirrors(results[:count])
         self._mirrors = best
         self._current_index = 0
 
@@ -247,8 +329,14 @@ class MirrorManager:
         if self.cache_path.exists():
             try:
                 with open(self.cache_path) as f:
-                    self._mirrors = json.load(f)
+                    raw = json.load(f)
+                if not isinstance(raw, list):
+                    raw = []
+                before = len(raw)
+                self._mirrors = _strip_loopback_mirrors(raw)
                 self._current_index = 0
+                if before and len(self._mirrors) < before:
+                    self._save_cached(self._mirrors)
             except (json.JSONDecodeError, OSError):
                 self._mirrors = []
 

@@ -45,6 +45,7 @@ from .installer.hooks import HookRunner, run_auto_hooks
 from .installer.lib_checker import LibChecker
 from .installer.rollback import RollbackManager
 
+from .ui.output import print_section, print_info, print_step, print_success
 
 from . import constants as C
 LOG_DIR = C.LOG_DIR
@@ -103,17 +104,23 @@ class Transaction:
                 print(f"\n{e}\n")
             else:
                 print(f"\n   ╭{'─' * 50}╮")
-                print(f"   │  TRANSACTION FAILED: Rolling Back Data")
+                print("   │  Install failed — restoring the pre-transaction snapshot")
                 print(f"   ╰{'─' * 50}╯")
-                print(f"   Error: {e}")
+                print(f"   Cause: {e}")
             
             if snapshot_id:
                 try:
                     self.rollback.restore(snapshot_id)
                     print("   ✓ System successfully reverted.")
                 except Exception as rollback_e:
-                    print(f"   [CRITICAL] Rollback mechanically failed: {rollback_e}")
-                    print(f"   [CRITICAL] System may be in an inconsistent state!")
+                    print(
+                        "   [CRITICAL] Rollback did not complete successfully: "
+                        f"{rollback_e}"
+                    )
+                    print(
+                        "   [CRITICAL] The system may be inconsistent — "
+                        "stop and seek help before rebooting or upgrading."
+                    )
 
         finally:
             # 5. Release lock & Log
@@ -172,10 +179,11 @@ class InstallTransaction(Transaction):
     """
     Handles resolving, downloading, building, and installing packages.
     """
-    def __init__(self, explicit: bool = True):
+    def __init__(self, explicit: bool = True, verbose: bool = False):
         super().__init__()
         self.explicit = explicit
-        
+        self.verbose = verbose
+
         self.sync_db = SyncDB()
         self.aur_db = AURDB()
 
@@ -257,7 +265,8 @@ class InstallTransaction(Transaction):
                     if t in protected_list:
                         raise ProtectedPackageError(t)
 
-            print("\n   [Install] Phase 1/6: Resolving Dependencies...")
+            print()
+            print_section("Install · 1/6 · Resolving dependencies")
             graph = DependencyGraph(self.sync_db, self.aur_db, self.local_db)
 
             for target in targets:
@@ -288,7 +297,14 @@ class InstallTransaction(Transaction):
                 print("Target is already up to date or blocked.")
                 return
 
-        print(f"   Calculated Order: {' -> '.join(install_order_names)}\n")
+        if self.verbose or len(install_order_names) <= 14:
+            print_info(f"Dependency order: {' → '.join(install_order_names)}")
+        else:
+            print_info(
+                f"Dependency order: {len(install_order_names)} packages "
+                "(use --verbose to print the full list)"
+            )
+        print()
 
         # Separate official vs AUR vs Build targets
         to_download = []
@@ -301,14 +317,23 @@ class InstallTransaction(Transaction):
                 # All non-aur are considered official/sync for this phase
                 to_download.append(pkg)
 
-        print("\n   [Install] Phase 2/6: Fetching Resources...")
-        
+        print_section("Install · 2/6 · Fetching packages")
+
         # Download Official Packages
         downloaded_paths = {}
+        if not to_download:
+            print_info(
+                "No packages to download from mirrors (using cache and/or local builds only)."
+            )
         if to_download:
             manager = MirrorManager()
+            if self.verbose:
+                print_info(f"Primary mirror: {manager.current}")
+                print_step("Parallel downloads with live progress; mirror failover is automatic.")
             fetcher = Fetcher(manager)
-            downloaded_paths = fetcher.download_packages(to_download)
+            downloaded_paths = fetcher.download_packages(
+                to_download, verbose=self.verbose
+            )
                  
             # GPG Verification of signatures
             gpg = GPGVerifier()
@@ -335,7 +360,10 @@ class InstallTransaction(Transaction):
                     build_queue.append({"name": pkg.name, "dir": pkg_dir})
             
             if build_queue:
-                print("\n   [Install] Phase 3/6: Compiling Packages...")
+                print()
+                print_section("Install · 3/6 · Compiling AUR packages")
+                if self.verbose:
+                    print_step("Build output from makepkg follows below.")
                 results = build_aur_packages(build_queue, interactive=True)
                 built_paths.update(results)
                 
@@ -346,7 +374,14 @@ class InstallTransaction(Transaction):
 
         # Conflict Checking & Safety
         merged_paths = {**downloaded_paths, **built_paths}
-        
+
+        print()
+        print_section("Install · 4/6 · Safety checks")
+        if self.verbose:
+            print_step(
+                "Checking package conflicts, file overlaps on disk, and library hints."
+            )
+
         # Package-level conflicts
         check_conflicts(filtered_pkgs, self.local_db)
         
@@ -363,7 +398,10 @@ class InstallTransaction(Transaction):
             # Here we skip deep mock lookup for brevity
             pass
 
-        print("\n   [Install] Phase 4/6: Extracting onto System...")
+        print()
+        print_section("Install · 5/6 · Extracting onto the system")
+        if self.verbose:
+            print_step("Running per-package install hooks before and after files land.")
         ext = Extractor()
         
         for pkg in filtered_pkgs:
@@ -393,10 +431,14 @@ class InstallTransaction(Transaction):
             hr.run_phase("post_install", pkg.version)
 
 
-        print("\n   [Install] Phase 6/6: Global Auto-Hooks...")
+        print()
+        print_section("Install · 6/6 · Global hooks")
+        if self.verbose:
+            print_step("Updating caches, databases, and other system-wide post-install tasks.")
         run_auto_hooks()
-        
-        print("\n   ★ Transaction successfully sealed.")
+
+        print()
+        print_success("Transaction successfully sealed.")
 
 
 class RemoveTransaction(Transaction):

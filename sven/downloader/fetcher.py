@@ -4,7 +4,9 @@
 #  downloader/fetcher.py — parallel HTTPS package downloader
 # ============================================================
 
+import logging
 import os
+import threading
 import requests
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -49,17 +51,21 @@ class Fetcher:
         # Performance tuning for unstable networks:
         # Use a pooled session with automatic low-level retries for connection blips
         self.session = requests.Session()
+        # No low-level retries here — mirror failover handles dead hosts quickly.
+        # Retrying the same URL (e.g. connection refused → localhost) blocks workers and spams urllib3 logs.
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=parallel,
             pool_maxsize=parallel,
-            max_retries=3,  # Connection retries before giving up on a specific mirror
+            max_retries=0,
         )
         self.session.mount("https://", adapter)
         self.session.mount("http://", adapter)
 
     # ── Public API ───────────────────────────────────────────
 
-    def download_packages(self, packages: list[Package]) -> dict[str, Path]:
+    def download_packages(
+        self, packages: list[Package], *, verbose: bool = False
+    ) -> dict[str, Path]:
         """
         Download a list of packages in parallel.
         Returns a dict of {pkg_name: local_file_path}.
@@ -77,8 +83,12 @@ class Fetcher:
             if cached and cached.exists() and cached.stat().st_size > 0:
                 # Even if cached, check if it's actually valid!
                 try:
-                    verify_checksum(cached, pkg.csum)
-                    print(f"   {pkg.filename:<45s}  [cached/valid]")
+                    verify_checksum(cached, pkg.csum, quiet_success=True)
+                    tag = "[cached/valid]"
+                    if verbose:
+                        print(f"   {pkg.filename:<45s}  {tag}  (SHA256 OK)")
+                    else:
+                        print(f"   {pkg.filename:<45s}  {tag}")
                     results[pkg.name] = cached
                 except Exception:
                     print(f"   {pkg.filename:<45s}  [cached/corrupt] -> re-downloading")
@@ -88,30 +98,55 @@ class Fetcher:
                 to_download.append(pkg)
 
         if not to_download:
+            if results:
+                if verbose:
+                    for pkg in packages:
+                        if pkg.name in results:
+                            print(f"   ✓ SHA256 verified: {pkg.filename}")
+                else:
+                    print(f"   ✓ SHA256 verified — {len(results)} package(s) (from cache)")
             return results
 
-        # Initialize multi-line display for the remaining downloads
-        display = MultiProgressDisplay([pkg.filename for pkg in to_download])
+        ui_lock = threading.Lock()
+        display = MultiProgressDisplay(
+            [pkg.filename for pkg in to_download],
+            verbose=verbose,
+            shared_lock=ui_lock,
+        )
 
-        # Download with industrial-strength failover
-        with ThreadPoolExecutor(max_workers=self.parallel) as pool:
-            futures = {
-                pool.submit(self._download_with_failover, pkg, display): pkg
-                for pkg in to_download
-            }
-            for future in as_completed(futures):
-                pkg = futures[future]
-                try:
-                    path = future.result()
-                    results[pkg.name] = path
-                    display.finish_single(pkg.filename)
-                except Exception as e:
-                    # After all retries exhausted, this package failed
-                    raise DownloadError(
-                        f"Target {pkg.filename} failed after all mirror failovers: {e}"
-                    )
-        
-        display.finish_all()
+        self.mirror.begin_parallel_downloads()
+        ulog = logging.getLogger("urllib3")
+        ulog_prev = ulog.level
+        ulog.setLevel(logging.ERROR)
+        try:
+            with ThreadPoolExecutor(max_workers=self.parallel) as pool:
+                futures = {
+                    pool.submit(self._download_with_failover, pkg, display): pkg
+                    for pkg in to_download
+                }
+                for future in as_completed(futures):
+                    pkg = futures[future]
+                    try:
+                        path = future.result()
+                        results[pkg.name] = path
+                        display.finish_single(pkg.filename)
+                    except Exception as e:
+                        display.abort_cleanup()
+                        raise DownloadError(
+                            f"Could not download {pkg.filename} after trying every mirror: {e}"
+                        ) from e
+
+            display.finish_all()
+            fetched = [p.filename for p in to_download]
+            if verbose:
+                for name in fetched:
+                    print(f"   ✓ SHA256 verified: {name}")
+            else:
+                print(f"   ✓ SHA256 verified — {len(fetched)} package(s)")
+        finally:
+            ulog.setLevel(ulog_prev)
+            self.mirror.end_parallel_downloads()
+
         return results
 
     # ── Failover Logic ───────────────────────────────────────
@@ -136,12 +171,16 @@ class Fetcher:
                 # If we got trash, we failing over to next mirror now!
                 try:
                     if pkg.csum:
-                        verify_checksum(dest, pkg.csum)
+                        verify_checksum(dest, pkg.csum, quiet_success=True)
                     return dest # SUCCESS!
                 except Exception as e:
                     # Checksum mismatch!
                     dest.unlink(missing_ok=True)
-                    print(f"\n   ⚠ Data Corruption: {mirror_url} sent bad content for {pkg.filename}.")
+                    logging.warning(
+                        "Mirror %s returned a bad checksum for %s — trying another mirror.",
+                        mirror_url,
+                        pkg.filename,
+                    )
                     last_error = e
                     self.mirror.blacklist_current()
                     self.mirror.next_mirror()

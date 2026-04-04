@@ -9,25 +9,33 @@ from pathlib import Path
 from ..exceptions import ChecksumMismatchError
 
 
-def verify_checksum(filepath: str | Path, expected_sha256: str):
+def verify_checksum(
+    filepath: str | Path,
+    expected_sha256: str,
+    *,
+    quiet_success: bool = False,
+):
     """
     Verify the SHA256 checksum of a file using the system's sha256sum utility.
     This is more robust on LFS systems than a custom Python implementation.
-    
+
     Args:
         filepath: Path to the file to check
         expected_sha256: Expected hex digest
-        
+        quiet_success: If True, do not print the success line (for parallel UI)
+
     Raises:
         ChecksumMismatchError if sums don't match or file missing
     """
     p = Path(filepath)
     if not p.exists():
+        if expected_sha256:
+            raise ChecksumMismatchError(p.name, expected_sha256, "(file not found)")
         raise FileNotFoundError(f"File not found for checksum: {p}")
 
     # Don't verify if no checksum provided
     if not expected_sha256:
-        return
+        return True
 
     try:
         # Run native sha256sum utility
@@ -61,4 +69,6 @@ def verify_checksum(filepath: str | Path, expected_sha256: str):
             
         raise ChecksumMismatchError(p.name, expected_sha256, actual)
 
-    print(f"   ✓ SHA256 verified: {p.name}")
+    if not quiet_success:
+        print(f"   ✓ SHA256 verified: {p.name}")
+    return True

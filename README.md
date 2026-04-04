@@ -1,7 +1,7 @@
 # Sven — The Seven OS Package Manager 🦁🏁
 
 [![License](https://img.shields.io/badge/License-GPL_v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-green.svg)](https://github.com/haroldmth/sven/releases/latest)
+[![Version](https://img.shields.io/badge/Version-1.1.0-green.svg)](https://github.com/haroldmth/sven/releases/latest)
 [![OS Architecture](https://img.shields.io/badge/OS-Seven_OS_|_LFS-orange.svg)](https://www.linuxfromscratch.org)
 [![Build Status](https://img.shields.io/badge/Build-Stable-brightgreen.svg)]()
 
@@ -10,7 +10,7 @@
   ██╔════╝██║   ██║██╔════╝████╗  ██║
   ███████╗██║   ██║█████╗  ██╔██╗ ██║
   ╚════██║╚██╗ ██╔╝██╔══╝  ██║╚██╗██║
-  ███████║ ╚████╔╝ ███████╗██║ ╚████║   v1.0.0 - Forge
+  ███████║ ╚████╔╝ ███████╗██║ ╚████║   v1.1.0 - Forge
   ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝   by HANS TECH
 ```
 

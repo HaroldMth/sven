@@ -12,10 +12,12 @@ def disable_colors():
     color_enabled = False
 
 def print_banner():
-    """Exact simulated output for Sven start"""
+    """Compact header for transactional commands (install, etc.)."""
+    from ..constants import VERSION
+
     b = (
         "╔══════════════════════════════════════════════════╗\n"
-        "║   Sven v1.0.0  ·  Seven OS  ·  by HANS TECH      ║\n"
+        f"║   Sven v{VERSION}  ·  Seven OS  ·  by HANS TECH      ║\n"
         "╚══════════════════════════════════════════════════╝"
     )
     if color_enabled:

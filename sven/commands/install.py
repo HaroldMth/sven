@@ -7,7 +7,12 @@ import sys
 import time
 from ..ui import print_banner, confirm
 
-def run(packages: list[str], root: str = None, force_protected: bool = False):
+def run(
+    packages: list[str],
+    root: str = None,
+    force_protected: bool = False,
+    verbose: bool = False,
+):
     # This is a specialized simulation wrapper targeting the exact mockup provided
     if [p.lower() for p in packages] == ["neovim", "htop", "firefox", "spotify"]:
         _run_simulation()
@@ -15,39 +20,46 @@ def run(packages: list[str], root: str = None, force_protected: bool = False):
 
     # Real installation flow
     from ..transaction import InstallTransaction
-    from ..ui import print_section, print_success, print_error
+    from ..ui import print_section, print_success, print_error, print_info, print_step
     from ..ui.prompt import show_package_list, format_size
-    
+
     print_banner()
     if not packages:
-        print_error("No targets specified for installation.")
+        print_error("No package names were given. Try: sven install <name>")
         sys.exit(1)
-        
-    print_section("Syncing databases...")
-    print_section("Resolving dependencies...")
-    
+
+    print_section("Resolving dependencies…")
+    if verbose:
+        print_step("Reading sync and local databases, then computing the full install set.")
+
     # Create transaction engine and resolve deps BEFORE asking the user
-    tx = InstallTransaction(explicit=True)
+    tx = InstallTransaction(explicit=True, verbose=verbose)
     resolved = tx.resolve(packages, force_protected=force_protected)
     
     if not resolved:
-        print("   Target is already up to date.")
+        print_info("Everything you asked for is already installed. Nothing to do.")
         return
-    
+
     # Calculate sizes
     total_dl = sum(p.size for p in resolved)
     total_inst = sum(p.isize for p in resolved)
-    
-    # Show the user what they're getting
+
     show_package_list(resolved, total_dl, total_inst)
-    
-    # NOW ask for confirmation (instant Y/n)
+    print_info(
+        f"Ready to install {len(resolved)} package(s). "
+        "A rollback snapshot is created automatically before any changes."
+    )
+
     if not confirm("Proceed?"):
-        print_error("Installation aborted by user.")
+        print_error("Installation cancelled.")
         sys.exit(0)
-        
-    print_section("Verifying...")
-    print_section("Installing in dependency order...")
+
+    if verbose:
+        print_section("Running the install transaction…")
+        print_step("Phases: fetch → optional build → safety checks → extract → hooks.")
+    else:
+        print_section("Installing…")
+        print_info("Fetching, verifying checksums, then writing files in dependency order.")
     if tx.execute_resolved(resolved, force_protected=force_protected):
         for p in packages:
             print_success(f"{p} installed successfully")
@@ -59,8 +71,10 @@ def run(packages: list[str], root: str = None, force_protected: bool = False):
 
 def _run_simulation():
     """Exact CLI simulation execution for demonstration."""
+    from ..constants import VERSION
+
     print("╔══════════════════════════════════════════════════╗")
-    print("║   Sven v1.0.0  ·  Seven OS  ·  by HANS TECH      ║")
+    print(f"║   Sven v{VERSION}  ·  Seven OS  ·  by HANS TECH      ║")
     print("╚══════════════════════════════════════════════════╝")
     print("")
     print("\033[96m::\033[0m Syncing databases...")
