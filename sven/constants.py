@@ -96,9 +96,9 @@ SUPPORTED_INIT = [INIT_SYSTEMD, INIT_SYSVINIT, INIT_OPENRC]
 DB_MAX_AGE_SECONDS = 86400   # 24 hours before stale warning
 
 # ── Download ─────────────────────────────────────────────────
-PARALLEL_DOWNLOADS  = 5
-DOWNLOAD_CHUNK_SIZE = 8192   # bytes
-DOWNLOAD_TIMEOUT    = 60     # seconds
+PARALLEL_DOWNLOADS  = 3
+DOWNLOAD_CHUNK_SIZE = 4096   # smaller chunks handled better on lossy links
+DOWNLOAD_TIMEOUT    = 120    # seconds
 MIRROR_BENCH_COUNT  = 5      # mirrors to benchmark
 
 # ── Security ─────────────────────────────────────────────────

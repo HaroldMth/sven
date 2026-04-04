@@ -64,7 +64,9 @@ class MultiProgressDisplay:
                 self.active_slots[filename] = {"slot": slot, "dl": 0, "tot": 0}
 
             data = self.active_slots[filename]
-            data["dl"] = downloaded
+            # Only update if progress is moving forward to prevent flicker on retry/failover
+            if downloaded > data["dl"]:
+                data["dl"] = downloaded
             data["tot"] = total
 
             self._render()

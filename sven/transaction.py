@@ -310,23 +310,12 @@ class InstallTransaction(Transaction):
             fetcher = Fetcher(manager)
             downloaded_paths = fetcher.download_packages(to_download)
                  
-            # Verify exactly after downloading
+            # GPG Verification of signatures
             gpg = GPGVerifier()
             for pkg in to_download:
                 path = downloaded_paths.get(pkg.name)
                 if path:
                     gpg.verify(path)
-                    try:
-                        verify_checksum(path, pkg.csum)
-                    except ChecksumMismatchError:
-                        # Mirror failover: this mirror gave us bad data
-                        print(f"   ⚠ Mirror {manager.current} gave us corrupted data. Switching...")
-                        manager.next_mirror()
-                        
-                        # Auto-purge corrupted file from cache
-                        if os.path.exists(path):
-                            os.remove(path)
-                        raise
 
         # Build AUR Packages
         built_paths = {}

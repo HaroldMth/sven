@@ -38,6 +38,8 @@ class MirrorManager:
         # Ranked list — fastest first
         self._mirrors: list[dict] = []
         self._current_index: int = 0
+        self._blacklist: set[str] = set()
+
     @property
     def mirrors(self) -> list[dict]:
         """Expose the internal ranked mirror list."""
@@ -50,28 +52,44 @@ class MirrorManager:
 
     # ── Public API ───────────────────────────────────────────
 
-
     @property
     def current(self) -> str:
         """Return the URL of the currently selected mirror."""
-        if not self._mirrors:
-            self._load_cached()
+        self.mirrors # trigger load
         if not self._mirrors:
             return DEFAULT_MIRROR
+            
+        # Ensure we're not on a blacklisted mirror
+        while self._mirrors[self._current_index]["url"] in self._blacklist:
+            self._current_index += 1
+            if self._current_index >= len(self._mirrors):
+                self._current_index = 0 # wrap around or fail
+                break
+
         return self._mirrors[self._current_index]["url"]
 
     def next_mirror(self) -> str:
         """
         Advance to the next mirror in the ranked list.
         Called automatically on download failure for failover.
-        Raises MirrorError if all mirrors are exhausted.
         """
         self._current_index += 1
         if self._current_index >= len(self._mirrors):
             raise MirrorError("All mirrors exhausted. No more mirrors to try.")
+            
         url = self._mirrors[self._current_index]["url"]
+        if url in self._blacklist:
+            return self.next_mirror() # recursive skip
+            
         print(f"   ⟳ Failing over to: {url}")
         return url
+
+    def blacklist_current(self):
+        """Mark the current mirror as unreliable for this session."""
+        url = self.current
+        if url not in self._blacklist:
+            print(f"   ⚠ Blacklisting unreliable mirror: {url}")
+            self._blacklist.add(url)
 
     def reset(self):
         """Reset back to the fastest mirror (index 0)."""

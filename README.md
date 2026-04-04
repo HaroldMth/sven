@@ -1,56 +1,81 @@
-# Sven Package Manager
+# Sven — The Seven OS Package Manager 🦁🏁
 
-![License](https://img.shields.io/badge/License-GPL_v3-blue.svg)
-![Version](https://img.shields.io/badge/Version-1.0.0-green.svg)
-![OS](https://img.shields.io/badge/OS-Seven_OS_|_LFS-orange.svg)
+[![License](https://img.shields.io/badge/License-GPL_v3-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0.0-green.svg)](https://github.com/haroldmth/sven/releases/latest)
+[![OS Architecture](https://img.shields.io/badge/OS-Seven_OS_|_LFS-orange.svg)](https://www.linuxfromscratch.org)
+[![Build Status](https://img.shields.io/badge/Build-Stable-brightgreen.svg)]()
 
-**Sven** is the official package manager for **Seven OS**, a high-performance Linux From Scratch (LFS) distribution utilizing SysVinit. Sven acts as a hybrid bridge, allowing users to effortlessly install pure Arch Linux packages and build from the Arch User Repository (AUR) without systemd contaminating their LFS base.
-
-## Features
-- **Zero-Traceback Safety Shield**: Globally catches execution crashes and presents clean, actionable error UI—keeping users abstracted from Python stack traces.
-- **Atomic Rollbacks**: Every transaction generates an instantaneous filesystem snapshot beforehand. If an installation fails, gets corrupted, or is aborted, Sven automatically rewinds the system state to ensure complete stability.
-- **SysVinit Native**: Actively filters out hard `systemd` dependencies and automatically translates standard Arch update hooks (like `systemctl restart`) into `SysVinit` equivalents.
-- **Fail-Fast Integrity**: Uses a "Double-Check" engine validating both exact network chunk sizes and `/usr/bin/sha256sum` hashes, with auto-failover to alternative mirrors upon corruption.
-- **AUR Integration**: Fetches, compiles, and packages AUR repositories dynamically into `.pkg.tar.zst` files for standard integration.
-
-## Installation
-For LFS Base Systems, download and execute the latest standalone binary from the releases page into `/usr/bin/`:
-
-```bash
-wget https://github.com/haroldmth/sven/releases/latest/download/sven-linux-x86_64 -O /usr/bin/sven
-chmod +x /usr/bin/sven
+```text
+  ███████╗██╗   ██╗███████╗███╗   ██╗
+  ██╔════╝██║   ██║██╔════╝████╗  ██║
+  ███████╗██║   ██║█████╗  ██╔██╗ ██║
+  ╚════██║╚██╗ ██╔╝██╔══╝  ██║╚██╗██║
+  ███████║ ╚████╔╝ ███████╗██║ ╚████║   v1.0.0 - Forge
+  ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝   by HANS TECH
 ```
 
-## Basic Usage
+**Sven** is a high-performance, production-grade package manager designed specifically for **Seven OS**. It serves as an industrial-strength bridge between a custom **Linux From Scratch (LFS)** base and the vast ecosystem of Arch Linux and the **Arch User Repository (AUR)**.
 
-Sven focuses on simplicity. The interface strips away complex flags in favor of clear UX pipelines.
+Sven's core philosophy is **Zero-Contamination**: It allows you to utilize Arch's binary repositories without a single line of `systemd` code entering your SysVinit system.
 
-* **Install** official packages or automatically build from AUR:
-  ```bash
-  sven install neovim firefox spotify
-  ```
-* **Remove** a package (handles reverse-dependency checking safely):
-  ```bash
-  sven remove htop
-  ```
-* **Upgrade** the entire system catalog:
-  ```bash
-  sven upgrade
-  ```
-* **Search** packages in Core, Extra, Multilib, and AUR:
-  ```bash
-  sven search "web browser"
-  ```
-* **Auto-Update** Sven itself to the latest GitHub release:
-  ```bash
-  sudo sven self-update
-  ```
+---
 
-## Project Directories
-* `/etc/sven/sven.conf`: Global configuration and mirror lists.
-* `/var/lib/sven/`: Sven's internal Sync and Local DBs tracking package states.
-* `/var/log/sven/`: Log outputs, including the `error.log` for the Safety Shield.
-* `/var/cache/sven/pkgs`: The offline package download cache.
+## ⚡ The Sven Edge
 
-## Copyright
-Developed for Seven OS by **HANS TECH © 2024**. Licensed under the GNU Public License version 3 (GPLv3).
+| Feature | Description |
+|---------|-------------|
+| **🦁 Safety Shield** | Globally catches all execution crashes. No Python tracebacks ever reach the user—only clean, actionable UI logs in `/var/log/sven/error.log`. |
+| **🏁 Atomic Snapshots** | Automated `os.replace` filesystem merges. If a download corrupts or a build fails, Sven ensures the previously stable system state remains untouched. |
+| **⚙️ SysVinit Translator** | Automatically filters `systemd` hard-dependencies (like `systemd-libs` or `dbus-systemd`) and routes them to standard Seven OS equivalents. |
+| **🚀 Mirror Benchmarking** | Native `sven mirror fastest` command ranks your mirrors by latency and bandwidth, automatically rewriting your configuration for peak speed. |
+| **📦 Dynamic AUR Engine** | A built-in orchestration layer for `makepkg` that resolves, compiles, and installs AUR packages with standard dependency resolution. |
+
+---
+
+## 🚀 Quick Start (Production)
+
+The fastest way to deploy Sven onto a fresh Seven OS build is through our **Foolproof Bootstrap Script** which performs a full system dependency audit:
+
+```bash
+# Clone the repository
+git clone https://github.com/haroldmth/sven.git /tmp/sven
+cd /tmp/sven
+
+# Run the production installer (performs LFS dependency audit + system adoption)
+sudo bash install.sh
+```
+
+---
+
+## 🛠️ Essential Commands
+
+| Command | Action |
+|---------|--------|
+| `sven install <pkg>` | Install from official Core/Extra/Multilib or the AUR. |
+| `sven upgrade` | Perform a full system synchronization and rolling upgrade. |
+| `sven remove <pkg>` | Securely remove a package and its orphaned dependencies. |
+| `sven check-update` | Check for a newer standalone Sven version on GitHub. |
+| `sven self-update` | Automagically upgrade the Sven binary to the latest stable release. |
+| `sven mirror fastest` | Rank and select the highest performing mirrors for your region. |
+
+---
+
+## 📂 System Architecture
+
+Sven stays out of your way and adheres to the **FHS** standard:
+
+- **`/etc/sven/`**: Global configuration, mirror lists, and SysVinit initscripts.
+- **`/var/lib/sven/`**: Local databases and synchronization catalogs.
+- **`/var/cache/sven/`**: High-performance package cache and temporary AUR build roots.
+- **`/var/log/sven/`**: The Zero-Traceback audit log.
+
+---
+
+## 🤝 Community & Support
+
+- **Found a bug?** Check [ISSUES.md](ISSUES.md) and report it to the HANS TECH team.
+- **Want to build Sven?** See the [INSTALL.md](INSTALL.md) for a deep dive into the LFS requirements.
+- **Want to contribute?** Use the guidelines in [CONTRIBUTIONS.md](CONTRIBUTIONS.md).
+
+Developed with passion by **HANS TECH © 2024**. Licensed under the **GPLv3**.
+🏁 *Sven: Speed, Stability, and the Freedom of LFS.* 🏁
