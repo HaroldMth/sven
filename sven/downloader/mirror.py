@@ -10,6 +10,7 @@ import socket
 import time
 import requests
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -64,21 +65,29 @@ def _strip_loopback_mirrors(
 ) -> list[dict]:
     """
     Remove mirrors whose host resolves only to 127.0.0.1 / ::1.
-    max_dns_check limits how many entries get a DNS lookup (full Arch list is huge).
+    Parallelizes DNS lookups to avoid multi-second stalls on startup.
     """
     if not mirrors:
         return mirrors
+    
     head_n = min(max_dns_check, len(mirrors))
     head, tail = mirrors[:head_n], mirrors[head_n:]
-    kept: list[dict] = []
-    dropped = 0
-    for m in head:
+    
+    def check_mirror(m):
         u = m.get("url") or ""
         if _url_resolves_to_loopback(u):
-            dropped += 1
-            logger.warning("Dropping mirror (resolves to loopback): %s", u)
-            continue
-        kept.append(m)
+            return None
+        return m
+
+    kept: list[dict] = []
+    
+    # Use a small thread pool for DNS lookups
+    with ThreadPoolExecutor(max_workers=32) as executor:
+        results = list(executor.map(check_mirror, head))
+        for res in results:
+            if res:
+                kept.append(res)
+            
     out = kept + tail
     if not out:
         return [
@@ -89,6 +98,8 @@ def _strip_loopback_mirrors(
                 "ping_ms": None,
             }
         ]
+    
+    dropped = head_n - len(kept)
     if dropped and not tail:
         logger.info("Removed %d loopback mirror(s); using public mirrors.", dropped)
     return out
@@ -257,6 +268,13 @@ class MirrorManager:
         return _strip_loopback_mirrors(mirrors)
 
     # ── Benchmark ────────────────────────────────────────────
+
+    def benchmark_all(self) -> list[dict]:
+        """
+        Benchmark all mirrors and return ordered list by speed.
+        This is the method called by the mirror command.
+        """
+        return self.benchmark()
 
     def benchmark(self, count: int = MIRROR_BENCH_COUNT) -> list[dict]:
         """

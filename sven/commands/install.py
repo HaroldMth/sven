@@ -6,15 +6,18 @@
 import sys
 import time
 from ..ui import print_banner, confirm
+from ..ui.graph_render import render_dependency_tree
 
 def run(
     packages: list[str],
     root: str = None,
     force_protected: bool = False,
+    force_reinstall: bool = False,
     verbose: bool = False,
+    version: str = None,
 ):
     # This is a specialized simulation wrapper targeting the exact mockup provided
-    if [p.lower() for p in packages] == ["neovim", "htop", "firefox", "spotify"]:
+    if not version and [p.lower() for p in packages] == ["neovim", "htop", "firefox", "spotify"]:
         _run_simulation()
         return
 
@@ -31,14 +34,71 @@ def run(
     print_section("Resolving dependencies…")
     if verbose:
         print_step("Reading sync and local databases, then computing the full install set.")
+    if force_reinstall:
+        print_info(
+            "Force mode: packages that are already installed will be included "
+            "and reinstalled from the cache or mirrors."
+        )
 
     # Create transaction engine and resolve deps BEFORE asking the user
     tx = InstallTransaction(explicit=True, verbose=verbose)
-    resolved = tx.resolve(packages, force_protected=force_protected)
+    resolved = tx.resolve(
+        packages,
+        force_protected=force_protected,
+        force_reinstall=force_reinstall,
+        version=version,
+    )
     
     if not resolved:
         print_info("Everything you asked for is already installed. Nothing to do.")
         return
+
+    # 1. Show Dependency Tree Diagram (v1.2.0)
+    from ..resolver.graph import DependencyGraph
+    graph = DependencyGraph(tx.sync_db, tx.aur_db, tx.local_db)
+    for p in packages:
+        try:
+            graph.add_package(p)
+        except: pass # already handled in resolve()
+    
+    render_dependency_tree(packages, graph.edges, graph.nodes)
+
+    # 2. Transaction Summary (v1.2.0)
+    to_install = [p for p in resolved]
+    to_build = [p for p in resolved if p.origin == "aur"]
+    
+    # Check cache for official packages
+    from ..constants import CACHE_PKGS
+    from pathlib import Path
+    cache_path = Path(CACHE_PKGS)
+    
+    cached_pkgs = []
+    download_pkgs = []
+    for p in resolved:
+        if p.origin == "aur":
+            continue
+        p_path = cache_path / p.filename
+        if p_path.exists() and p_path.stat().st_size > 0:
+            cached_pkgs.append(p)
+        else:
+            download_pkgs.append(p)
+            
+    # We want to know how many of the *targets* were already installed
+    installed_targets = []
+    for p_name in packages:
+        if tx.local_db.has(p_name) and not force_reinstall:
+            installed_targets.append(p_name)
+    
+    total_dl_bytes = sum(p.size for p in download_pkgs)
+    total_dl_mib = total_dl_bytes / 1024 / 1024
+    
+    print(f"   \033[1mTransaction Summary\033[0m")
+    if installed_targets:
+        print(f"   ├─ Already Installed : {len(installed_targets)} targets")
+    print(f"   ├─ Re-using Cached   : {len(cached_pkgs)} packages")
+    print(f"   ├─ To Download       : {len(download_pkgs)} ({total_dl_mib:.2f} MiB)")
+    print(f"   └─ To Build (AUR)    : {len(to_build)}")
+    print()
 
     # Calculate sizes
     total_dl = sum(p.size for p in resolved)
@@ -60,7 +120,12 @@ def run(
     else:
         print_section("Installing…")
         print_info("Fetching, verifying checksums, then writing files in dependency order.")
-    if tx.execute_resolved(resolved, force_protected=force_protected):
+    if tx.execute_resolved(
+        resolved,
+        force_protected=force_protected,
+        force_reinstall=force_reinstall,
+        install_targets=packages,
+    ):
         for p in packages:
             print_success(f"{p} installed successfully")
     else:

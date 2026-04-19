@@ -50,7 +50,7 @@ class TestTransaction(unittest.TestCase):
         tx = Transaction()
         
         class FaultyTx(Transaction):
-            def _execute_core(self, pkgs):
+            def _execute_core(self, pkgs, **kwargs):
                 raise ValueError("Oops!")
 
         faulty = FaultyTx()
@@ -64,7 +64,7 @@ class TestTransaction(unittest.TestCase):
     def test_transaction_success(self):
         """Should release lock and log on success."""
         class GoodTx(Transaction):
-            def _execute_core(self, pkgs):
+            def _execute_core(self, pkgs, **kwargs):
                 return True
 
         tx = GoodTx()

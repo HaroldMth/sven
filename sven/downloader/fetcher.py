@@ -22,6 +22,7 @@ from ..constants import (
 )
 from ..db.models import Package
 from ..exceptions import DownloadError
+from ..ui.output import print_info, print_step
 from .mirror import MirrorManager
 
 
@@ -42,11 +43,13 @@ class Fetcher:
         mirror_manager: MirrorManager,
         cache_dir: str = CACHE_PKGS,
         parallel: int = PARALLEL_DOWNLOADS,
+        verbose: bool = False,
     ):
         self.mirror = mirror_manager
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.parallel = parallel
+        self.verbose = verbose
         
         # Performance tuning for unstable networks:
         # Use a pooled session with automatic low-level retries for connection blips
@@ -100,9 +103,11 @@ class Fetcher:
         if not to_download:
             if results:
                 if verbose:
+                    print_info("All packages found in cache, verifying checksums...")
                     for pkg in packages:
                         if pkg.name in results:
                             print(f"   ✓ SHA256 verified: {pkg.filename}")
+                    print_info(f"✓ All {len(results)} cached package(s) verified successfully")
                 else:
                     print(f"   ✓ SHA256 verified — {len(results)} package(s) (from cache)")
             return results
@@ -114,10 +119,20 @@ class Fetcher:
             shared_lock=ui_lock,
         )
 
+        if self.verbose:
+            print_info(f"Initializing parallel downloads (max {self.parallel} connections)...")
+            print_step(f"Mirror: {self.mirror.current}")
+        else:
+            print_info("   · waiting…")
+        
         self.mirror.begin_parallel_downloads()
         ulog = logging.getLogger("urllib3")
         ulog_prev = ulog.level
         ulog.setLevel(logging.ERROR)
+        
+        if verbose:
+            print_info(f"[DEBUG] ThreadPoolExecutor started with {self.parallel} workers")
+            print_info(f"[DEBUG] Socket default timeout: {DOWNLOAD_TIMEOUT}s")
         try:
             with ThreadPoolExecutor(max_workers=self.parallel) as pool:
                 futures = {
@@ -163,9 +178,18 @@ class Fetcher:
 
         for attempt in range(MAX_MIRRORS_PER_PKG):
             mirror_url = self.mirror.current
+            if self.verbose:
+                import time
+                start_dns = time.monotonic()
+                print(f"   [DEBUG] Connecting to mirror: {mirror_url}...")
+            
             try:
                 # attempt the actual download
                 dest = self._download_single(pkg, display, mirror_url)
+                
+                if self.verbose:
+                    lat = (time.monotonic() - start_dns) * 1000
+                    print(f"   [DEBUG] Mirror responded in {lat:.1f}ms")
                 
                 # IMMEDIATE INTEGRITY CHECK
                 # If we got trash, we failing over to next mirror now!
@@ -230,6 +254,12 @@ class Fetcher:
             stream=True,
             timeout=DOWNLOAD_TIMEOUT,
         )
+
+        if self.verbose:
+            print(f"   [DEBUG] HTTP GET {url}")
+            print(f"   [DEBUG] Request Headers: {headers}")
+            print(f"   [DEBUG] Response Status: {resp.status_code}")
+            print(f"   [DEBUG] Response Headers: {dict(resp.headers)}")
 
         # If server doesn't support Range, start over
         if resp.status_code == 200 and resume_pos > 0:

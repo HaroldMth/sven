@@ -123,6 +123,15 @@ class DependencyGraph:
 
         # 3. Check SyncDB
         pkg = self.sync_db.get(name)
+
+        # If we have an exact version requirement and SyncDB version doesn't match,
+        # OR if not in SyncDB, check CACHE.
+        if op == "=" and req_ver:
+            if not pkg or pkg.version != req_ver:
+                cache_pkg = self._find_in_cache(name, req_ver)
+                if cache_pkg:
+                    pkg = cache_pkg
+
         if not pkg:
             # 4. Try AUR if enabled
             if self.aur_db:
@@ -173,6 +182,28 @@ class DependencyGraph:
         # Disabled for demonstration purposes since we don't have
         # a fully Arch-compliant libalpm version parser.
         pass
+
+    def _find_in_cache(self, name: str, req_ver: str) -> Optional[Package]:
+        """
+        Scan /var/cache/sven/pkgs for a specific version.
+        """
+        from ..constants import CACHE_PKGS
+        from pathlib import Path
+        cache_path = Path(CACHE_PKGS)
+        if not cache_path.exists():
+            return None
+
+        for f in cache_path.iterdir():
+            if f.name.startswith(f"{name}-{req_ver}-") and any(f.name.endswith(ext) for ext in [".pkg.tar.zst", ".pkg.tar.xz"]):
+                # Mock a package object from the filename
+                return Package(
+                    name=name,
+                    version=req_ver,
+                    filename=f.name,
+                    repo="cache",
+                    origin="official",
+                )
+        return None
 
     def get_graph_data(self) -> Dict[str, Set[str]]:
         """Returns the edges in a format suitable for TopologicalSorter."""

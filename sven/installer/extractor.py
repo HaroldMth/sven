@@ -25,9 +25,10 @@ METADATA_FILES = {".PKGINFO", ".MTREE", ".INSTALL", ".BUILDINFO"}
 
 
 class Extractor:
-    def __init__(self, install_root: str = None):
+    def __init__(self, install_root: str = None, verbose: bool = False):
         self.config = get_config()
         self.root = Path(install_root or self.config.install_root)
+        self.verbose = verbose
         if not self.root.exists():
             self.root.mkdir(parents=True, exist_ok=True)
 
@@ -92,6 +93,8 @@ class Extractor:
 
                             # Extract file
                             if member.isreg():
+                                if self.verbose:
+                                    print(f"     [DEBUG] Extracting: {member.name}")
                                 with tar.extractfile(member) as source, open(dest, "wb") as target:
                                     target.write(source.read())
                                 

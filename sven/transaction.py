@@ -46,6 +46,7 @@ from .installer.lib_checker import LibChecker
 from .installer.rollback import RollbackManager
 
 from .ui.output import print_section, print_info, print_step, print_success
+from .ui.graph_render import render_dependency_tree
 
 from . import constants as C
 LOG_DIR = C.LOG_DIR
@@ -68,7 +69,13 @@ class Transaction:
         if not log_path.exists():
             log_path.mkdir(parents=True, exist_ok=True)
 
-    def execute(self, packages: list[str], force_protected: bool = False, _use_resolved: bool = False) -> bool:
+    def execute(
+        self,
+        packages: list[str],
+        force_protected: bool = False,
+        _use_resolved: bool = False,
+        force_reinstall: bool = False,
+    ) -> bool:
         """
         Public entry point. 
         Acquires lock, creates snapshot, tries operation.
@@ -91,7 +98,15 @@ class Transaction:
             snapshot_id = self.rollback.create_snapshot(snapshot_pkgs)
 
             # 3. Fire the implementation
-            self._execute_core(packages, force_protected=force_protected, _use_resolved=_use_resolved)
+            if self.verbose:
+                print(f"   [DEBUG] Starting core execution for: {', '.join(packages) if packages else 'all'}")
+                print(f"   [DEBUG] Snapshot ID: {snapshot_id}")
+            self._execute_core(
+                packages,
+                force_protected=force_protected,
+                _use_resolved=_use_resolved,
+                force_reinstall=force_reinstall,
+            )
             success = True
 
         except Exception as e:
@@ -130,7 +145,13 @@ class Transaction:
 
         return success
 
-    def _execute_core(self, packages: list[str], force_protected: bool = False, _use_resolved: bool = False):
+    def _execute_core(
+        self,
+        packages: list[str],
+        force_protected: bool = False,
+        _use_resolved: bool = False,
+        force_reinstall: bool = False,
+    ):
         """Implemented by child classes."""
         raise NotImplementedError
 
@@ -187,7 +208,13 @@ class InstallTransaction(Transaction):
         self.sync_db = SyncDB()
         self.aur_db = AURDB()
 
-    def resolve(self, targets: list[str], force_protected: bool = False) -> list:
+    def resolve(
+        self,
+        targets: list[str],
+        force_protected: bool = False,
+        force_reinstall: bool = False,
+        version: str = None,
+    ) -> list:
         """
         Phase 1 only: resolve deps and return the filtered install order.
         This lets the CLI show the user what they're getting BEFORE confirming.
@@ -208,7 +235,10 @@ class InstallTransaction(Transaction):
 
         graph = DependencyGraph(self.sync_db, self.aur_db, self.local_db)
         for target in targets:
-            graph.add_package(target)
+            if version:
+                graph.add_package(f"{target}={version}")
+            else:
+                graph.add_package(target)
 
         install_order = sort_dependencies(graph.nodes, graph.edges)
 
@@ -222,7 +252,8 @@ class InstallTransaction(Transaction):
                 self._handle_scary_prompt(detected_deps)
 
         installed = self.local_db.list_installed()
-        install_order = [p for p in install_order if p.name not in installed]
+        if not force_reinstall:
+            install_order = [p for p in install_order if p.name not in installed]
 
         if not install_order:
             return []
@@ -230,7 +261,13 @@ class InstallTransaction(Transaction):
         filtered_pkgs, _ = filter_systemd_packages(install_order, "sysvinit", strict=False)
         return filtered_pkgs
 
-    def execute_resolved(self, resolved_pkgs: list, force_protected: bool = False) -> bool:
+    def execute_resolved(
+        self,
+        resolved_pkgs: list,
+        force_protected: bool = False,
+        force_reinstall: bool = False,
+        install_targets: list[str] | None = None,
+    ) -> bool:
         """
         Execute install phases 2-6 using a pre-resolved package list.
         Called after the user confirms.
@@ -241,10 +278,24 @@ class InstallTransaction(Transaction):
         
         # Save the resolved list and call _execute_resolved_core inside the transaction wrapper
         self._resolved_pkgs = resolved_pkgs
-        return self.execute([], force_protected=force_protected, _use_resolved=True)
+        self._install_target_names = frozenset(install_targets or [])
+        return self.execute(
+            [],
+            force_protected=force_protected,
+            _use_resolved=True,
+            force_reinstall=force_reinstall,
+        )
         
 
-    def _execute_core(self, targets: list[str], force_protected: bool = False, _use_resolved: bool = False):
+    def _execute_core(
+        self,
+        targets: list[str],
+        force_protected: bool = False,
+        _use_resolved: bool = False,
+        force_reinstall: bool = False,
+    ):
+        installed = self.local_db.list_installed()
+
         # If we have pre-resolved packages, skip resolution
         if _use_resolved and hasattr(self, '_resolved_pkgs'):
             filtered_pkgs = self._resolved_pkgs
@@ -283,8 +334,8 @@ class InstallTransaction(Transaction):
                 if detected_deps:
                     self._handle_scary_prompt(detected_deps)
 
-            installed = self.local_db.list_installed()
-            install_order = [p for p in install_order if p.name not in installed]
+            if not force_reinstall:
+                install_order = [p for p in install_order if p.name not in installed]
 
             if not install_order:
                 print("Target is already up to date.")
@@ -296,6 +347,12 @@ class InstallTransaction(Transaction):
             if not filtered_pkgs:
                 print("Target is already up to date or blocked.")
                 return
+
+        explicit_names = (
+            self._install_target_names
+            if _use_resolved and hasattr(self, "_install_target_names")
+            else frozenset(targets)
+        )
 
         if self.verbose or len(install_order_names) <= 14:
             print_info(f"Dependency order: {' → '.join(install_order_names)}")
@@ -330,17 +387,32 @@ class InstallTransaction(Transaction):
             if self.verbose:
                 print_info(f"Primary mirror: {manager.current}")
                 print_step("Parallel downloads with live progress; mirror failover is automatic.")
-            fetcher = Fetcher(manager)
+                print_info(f"Downloading {len(to_download)} package(s)...")
+                for pkg in to_download:
+                    print(f"   • {pkg.name:<18} {pkg.filename} ({pkg.size/1024/1024:.1f} MiB)")
+                    if self.verbose:
+                        print(f"     [DEBUG] Repo: {pkg.repo} | Hash: {pkg.csum[:32]}...")
+            else:
+                print_info(f"Downloading {len(to_download)} package(s)...")
+            fetcher = Fetcher(manager, verbose=self.verbose)
             downloaded_paths = fetcher.download_packages(
                 to_download, verbose=self.verbose
             )
                  
             # GPG Verification of signatures
+            if self.verbose:
+                print_info("Verifying GPG signatures...")
             gpg = GPGVerifier()
             for pkg in to_download:
                 path = downloaded_paths.get(pkg.name)
                 if path:
+                    if self.verbose:
+                        print_step(f"Verifying {pkg.filename}...")
                     gpg.verify(path)
+                    if self.verbose:
+                        print(f"   ✓ GPG signature verified: {pkg.filename}")
+            if self.verbose:
+                print_success("All GPG signatures verified successfully")
 
         # Build AUR Packages
         built_paths = {}
@@ -354,7 +426,7 @@ class InstallTransaction(Transaction):
                 
                 # Check cache first
                 cached = aur_cache.check_before_build(pkg.name, pkg.version)
-                if cached:
+                if cached and not force_reinstall:
                     built_paths[pkg.name] = cached
                 else:
                     build_queue.append({"name": pkg.name, "dir": pkg_dir})
@@ -381,35 +453,61 @@ class InstallTransaction(Transaction):
             print_step(
                 "Checking package conflicts, file overlaps on disk, and library hints."
             )
+            print_info(f"Running checks on {len(filtered_pkgs)} package(s)...")
 
         # Package-level conflicts
+        if self.verbose:
+            print_step("Checking package-level conflicts...")
         check_conflicts(filtered_pkgs, self.local_db)
+        if self.verbose:
+            print_success("No package conflicts detected")
         
         # File-level conflicts
+        if self.verbose:
+            print_step("Checking file-level conflicts...")
         for pkg in filtered_pkgs:
             archive = merged_paths.get(pkg.name)
             if archive:
+                if self.verbose:
+                    print(f"   • Checking {pkg.filename}...")
                 check_file_conflicts(pkg, archive, self.local_db, force=False)
+        if self.verbose:
+            print_success("No file conflicts detected")
                 
-        # Library Checks
+        # Library Checks & ABI compatibility
+        if self.verbose:
+            print_step("Checking library compatibility...")
         lib_chk = LibChecker()
+        from .resolver.compat import check_package_abi
         for pkg_name, archive in merged_paths.items():
             # In real system, we'd read requires from archive .PKGINFO
             # Here we skip deep mock lookup for brevity
             pass
+            
+            # Deep ABI GLIBC requirements vs Host Check
+            abi_res = check_package_abi(archive)
+            if not abi_res["compatible"]:
+                error_details = "\n".join(abi_res["details"])
+                raise SvenError(f"Package {pkg_name} is practically incompatible with host glibc:\n{error_details}")
+        if self.verbose:
+            print_success("All library compatibility checks passed")
 
         print()
-        print_section("Install · 5/6 · Extracting onto the system")
+        print_section("Install · 5/6 · Extracting onto system")
         if self.verbose:
             print_step("Running per-package install hooks before and after files land.")
-        ext = Extractor()
+            print_info(f"Extracting {len(filtered_pkgs)} package(s)...")
+        ext = Extractor(verbose=self.verbose)
         
-        for pkg in filtered_pkgs:
+        for i, pkg in enumerate(filtered_pkgs, 1):
             pkg_name = pkg.name
             if pkg_name not in merged_paths:
                 continue
                  
             archive = merged_paths[pkg_name]
+            
+            if self.verbose:
+                print(f"   [{i}/{len(filtered_pkgs)}] Extracting {pkg.filename}...")
             
             # Pre hooks
             hr = HookRunner(pkg.name, Path(archive).with_name(".INSTALL").as_posix())
@@ -417,13 +515,19 @@ class InstallTransaction(Transaction):
 
             # Extract!
             files_extracted = ext.extract(archive)
+            
+            if self.verbose:
+                print(f"   ✓ Extracted {len(files_extracted)} files")
 
             # Register
             self.local_db.register(
                 pkg,
                 files_extracted,
-                explicit=(self.explicit and pkg.name in targets)
+                explicit=(self.explicit and pkg.name in explicit_names),
             )
+            
+            if self.verbose:
+                print(f"   ✓ Registered {pkg.name} in database")
 
 
 
@@ -435,7 +539,10 @@ class InstallTransaction(Transaction):
         print_section("Install · 6/6 · Global hooks")
         if self.verbose:
             print_step("Updating caches, databases, and other system-wide post-install tasks.")
+            print_info("Running system-wide post-install hooks...")
         run_auto_hooks()
+        if self.verbose:
+            print_success("All system hooks completed successfully")
 
         print()
         print_success("Transaction successfully sealed.")
@@ -445,7 +552,13 @@ class RemoveTransaction(Transaction):
     """
     Handles safely removing packages and cleaning DB.
     """
-    def _execute_core(self, targets: list[str], force_protected: bool = False, _use_resolved: bool = False):
+    def _execute_core(
+        self,
+        targets: list[str],
+        force_protected: bool = False,
+        _use_resolved: bool = False,
+        force_reinstall: bool = False,
+    ):
         if not targets:
             return
 
@@ -495,7 +608,13 @@ class UpgradeTransaction(InstallTransaction):
             return self.local_db.list_installed()
         return packages
         
-    def _execute_core(self, targets: list[str] = None, force_protected: bool = False, _use_resolved: bool = False):
+    def _execute_core(
+        self,
+        targets: list[str] = None,
+        force_protected: bool = False,
+        _use_resolved: bool = False,
+        force_reinstall: bool = False,
+    ):
         print("\n   [Upgrade] Synchronizing local catalog with mirrors...")
         
         installed = self.local_db.list_installed()
@@ -518,4 +637,8 @@ class UpgradeTransaction(InstallTransaction):
         print(f"   => Found {len(to_upgrade)} upgrades: {' '.join(to_upgrade)}")
         
         # Fire off an InstallTransaction on the diff
-        super()._execute_core(to_upgrade, force_protected=force_protected)
+        super()._execute_core(
+            to_upgrade,
+            force_protected=force_protected,
+            force_reinstall=force_reinstall,
+        )

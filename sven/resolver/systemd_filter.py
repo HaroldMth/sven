@@ -36,6 +36,8 @@ SYSTEMD_SOFT_INDICATORS = frozenset({
 SYSTEMD_ALTERNATIVES = {
     "systemd-libs":    "elogind",
     "libsystemd":      "elogind",
+    "libsystemd.so":   "elogind",
+    "libsystemd.so=0-64": "elogind",
     "libudev.so":      "eudev",
     "systemd":         None,   # No drop-in alternative
 }
@@ -98,8 +100,11 @@ def check_systemd_deps(pkg: Package, init_system: str = "sysvinit") -> SystemdCh
         # Also check for .so references to systemd libraries
         elif "libsystemd" in dep_name or "libudev" in dep_name:
             hard_deps.append(dep_name)
+            alt = SYSTEMD_ALTERNATIVES.get(dep_name)
+            if alt:
+                alternatives[dep_name] = alt
 
-    safe = len(hard_deps) == 0
+    safe = len(hard_deps) == 0 or (len(hard_deps) > 0 and len(alternatives) == len(hard_deps))
     source_advised = not safe and len(alternatives) < len(hard_deps)
 
     return SystemdCheckResult(

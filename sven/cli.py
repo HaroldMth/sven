@@ -70,6 +70,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_install.add_argument("--source", action="store_true", help="Force build from source")
     p_install.add_argument("--binary", action="store_true", help="Force binary install")
+    p_install.add_argument(
+        "--force",
+        action="store_true",
+        help="Install or reinstall even if packages are already installed (refetch/rebuild as needed)",
+    )
+    p_install.add_argument(
+        "--version",
+        metavar="VER",
+        help="Install a specific version of the package",
+    )
     p_install.add_argument("--force-protected", action="store_true", help="Allow managing protected LFS packages")
 
     # ── remove ────────────────────────────────────────────────
@@ -104,6 +114,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_info = subparsers.add_parser("info", help="Show package details")
     p_info.add_argument("package", metavar="PKG")
 
+    # ── path ──────────────────────────────────────────────────
+    p_path = subparsers.add_parser(
+        "path",
+        help="Show filesystem paths for an installed package",
+    )
+    p_path.add_argument("package", metavar="PKG")
+    p_path.add_argument(
+        "--files",
+        action="store_true",
+        help="List every tracked file (can be long)",
+    )
+
     # ── list ──────────────────────────────────────────────────
     p_list = subparsers.add_parser("list", help="List installed packages")
     p_list.add_argument("--aur",      action="store_true", help="AUR packages only")
@@ -113,6 +135,12 @@ def build_parser() -> argparse.ArgumentParser:
     # ── sync ──────────────────────────────────────────────────
     p_sync = subparsers.add_parser("sync", help="Refresh package databases")
     p_sync.add_argument("--force", action="store_true", help="Force even if fresh")
+
+    # ── check-version ──────────────────────────────────────────
+    p_check = subparsers.add_parser("check-version", help="Check available versions of a package")
+    p_check.add_argument("package", metavar="PKG")
+
+    # ── doctor ─────────────────────────────────────────────────
 
     # ── clean ─────────────────────────────────────────────────
     p_clean = subparsers.add_parser("clean", help="Clear package cache")
@@ -148,6 +176,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_rdeps.add_argument("package", metavar="PKG")
 
     # ── update ────────────────────────────────────────────────
+    # ── cnf ──────────────────────────────────────────────────
+    p_cnf = subparsers.add_parser("cnf", help="Command-not-found handler lookup")
+    p_cnf.add_argument("cmd", metavar="COMMAND")
+
     subparsers.add_parser("check-update", help="Check for a newer version of Sven")
     subparsers.add_parser("self-update",  help="Download and install latest Sven release")
 
@@ -179,7 +211,16 @@ def main():
     # ── Configure Logging ─────────────────────────────────────
     import logging
     if verbose:
-        logging.basicConfig(level=logging.DEBUG, format="\033[90mDEBUG: %(message)s\033[0m")
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format=(
+                "\033[90m%(asctime)s.%(msecs)03d %(name)s %(levelname)s: "
+                "%(message)s\033[0m"
+            ),
+            datefmt="%H:%M:%S",
+        )
+        for _name in ("sven", "urllib3", "requests"):
+            logging.getLogger(_name).setLevel(logging.DEBUG)
     else:
         logging.basicConfig(level=logging.WARNING)
 
@@ -199,7 +240,7 @@ def main():
 
     # ── Automagic Update Check ────────────────────────────────
     # We do not check on self-update or check-update commands to avoid redundancy
-    if args.command not in ("self-update", "check-update"):
+    if args.command not in ("self-update", "check-update", "doctor"):
         from .core.updater import check_for_updates_silently
         check_for_updates_silently()
 
@@ -216,7 +257,9 @@ def main():
             args.packages,
             root=args.root if hasattr(args, "root") else None,
             force_protected=args.force_protected,
+            force_reinstall=getattr(args, "force", False),
             verbose=verbose,
+            version=getattr(args, "version", None),
         )
     elif cmd == "remove":
         from .commands.remove import run
@@ -238,12 +281,21 @@ def main():
     elif cmd == "info":
         from .commands.info import run
         run(args.package)
+    elif cmd == "path":
+        from .commands.path_cmd import run as path_run
+        path_run(args.package, list_files=args.files if hasattr(args, "files") else False)
     elif cmd == "list":
         from .commands.list_cmd import run
         run()
     elif cmd == "sync":
         from .commands.sync import run
         run()
+    elif cmd == "check-version":
+        from .commands.check_version import run
+        run(args.package)
+    elif cmd == "doctor":
+        from .commands.doctor import run as doctor_run
+        doctor_run(offline=getattr(args, "offline", False))
     elif cmd == "clean":
         from .commands.clean import run
         run(all_cache=args.all if hasattr(args, "all") else False)
@@ -271,6 +323,9 @@ def main():
     elif cmd in ("deps", "rdeps"):
         from .commands.deps import run
         run(args.package, reverse=(cmd == "rdeps"))
+    elif cmd == "cnf":
+        from .commands.find_command import run
+        run(args.cmd)
     else:
         parser.print_help()
         sys.exit(1)

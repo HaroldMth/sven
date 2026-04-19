@@ -59,6 +59,10 @@ class MultiProgressDisplay:
         self._wait_set: set[str] = set()
         self._wait_buf: Dict[str, dict] = {}
 
+        # For byte-weighted global progress
+        self._file_totals: Dict[str, int] = {}
+        self._file_downloaded: Dict[str, int] = {}
+
         self._ever_rendered = False
         self._block_lines = self.window_size + 1
         self._last_render_ts = 0.0
@@ -132,15 +136,17 @@ class MultiProgressDisplay:
 
             data = self.active_slots[filename]
             # New HTTP attempt / mirror failover: byte count can drop — allow it
-            if downloaded < data["dl"]:
-                data["dl"] = downloaded
-            elif downloaded > data["dl"]:
-                data["dl"] = downloaded
+            data["dl"] = downloaded
             if total > 0:
                 data["tot"] = total
+            
+            # Track bytes for global progress
+            self._file_downloaded[filename] = downloaded
+            if total > 0:
+                self._file_totals[filename] = total
 
             now = time.monotonic()
-            complete = total > 0 and data["dl"] >= total
+            complete = total > 0 and downloaded >= total
             if (
                 not complete
                 and (now - self._last_render_ts) < self._RENDER_MIN_INTERVAL
@@ -213,31 +219,46 @@ class MultiProgressDisplay:
                 else:
                     bar = bar_fill
 
-                dl_mb = dl / 1_000_000
-                tot_mb = tot / 1_000_000 if tot > 0 else 0.0
+                dl_mb = dl / 1_048_576
+                tot_mb = tot / 1_048_576 if tot > 0 else 0.0
                 name = self._format_name(fname, maxlen=name_len)
                 pct_s = f"{pct_i:>3}%"
-                if self.verbose:
-                    extra = f"  {dl_mb:.1f}/{tot_mb:.1f} MB" if tot > 0 else ""
-                else:
-                    extra = ""
-                line = f"   ▸ {name:<{name_len}}  [{bar}] {pct_s}{extra}"
+                
+                # Show package size even in non-verbose if we have it
+                size_str = f" ({dl_mb:.1f}/{tot_mb:.1f} MB)" if tot > 0 else ""
+                
+                line = f"   ▸ {name:<{name_len}}  [{bar}] {pct_s}{size_str}"
                 sys.stdout.write(line[:tw] + "\n")
             else:
                 idle = "   · waiting…" if self.completed_count < self.total_count else "   · —"
+                if self.verbose and self.completed_count < self.total_count:
+                    waiting_count = len(self._wait_fifo)
+                    if waiting_count > 0:
+                        idle = f"   · waiting… ({waiting_count} queued)"
                 sys.stdout.write(_style("\033[90m", idle + "\n") if color_enabled else idle + "\n")
 
         sys.stdout.write("\r\033[2K")
-        done = self.completed_count
-        total = self.total_count
-        gpct = done / total if total > 0 else 0.0
+        
+        # Calculate global progress based on bytes if we have totals, otherwise fall back to count
+        known_tot = sum(self._file_totals.values())
+        if known_tot > 0:
+            current_dl = sum(self._file_downloaded.values())
+            gpct = current_dl / known_tot
+        else:
+            done = self.completed_count
+            total = self.total_count
+            gpct = done / total if total > 0 else 0.0
+            
         g_pct_i = min(100, int(gpct * 100))
         gw = max(12, tw - 44)
         gf = min(gw, int(gpct * gw))
         g_bar = "█" * gf + "░" * (gw - gf)
         if color_enabled:
             g_bar = _style("\033[94m", g_bar)
-        tail = f"   Overall  [{g_bar}] {g_pct_i:>3}%  ({done}/{total} done)\n"
+        
+        done = self.completed_count
+        total = self.total_count
+        tail = f"   Overall  [{g_bar}] {g_pct_i:>3}%  ({done}/{total} files done)\n"
         sys.stdout.write(tail)
         sys.stdout.flush()
         self._ever_rendered = True
