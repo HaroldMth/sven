@@ -126,8 +126,11 @@ def run(
         force_reinstall=force_reinstall,
         install_targets=packages,
     ):
+        requested = {name.lower() for name in packages}
+        installed_now = {pkg.name.lower(): pkg.name for pkg in resolved if pkg.name.lower() in requested}
         for p in packages:
-            print_success(f"{p} installed successfully")
+            if p.lower() in installed_now:
+                print_success(f"{installed_now[p.lower()]} installed successfully")
     else:
         print_error("Installation failed.")
         sys.exit(1)

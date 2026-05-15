@@ -21,7 +21,7 @@ from ..constants import (
     ARCH_ARCH,
 )
 from ..db.models import Package
-from ..exceptions import DownloadError
+from ..exceptions import DownloadError, ExtractionError
 from ..ui.output import print_info, print_step
 from .mirror import MirrorManager
 
@@ -173,8 +173,9 @@ class Fetcher:
         """
         from .checksum import verify_checksum
         
-        MAX_MIRRORS_PER_PKG = 10
+        MAX_MIRRORS_PER_PKG = 2
         last_error = None
+        checksum_failures = 0
 
         for attempt in range(MAX_MIRRORS_PER_PKG):
             mirror_url = self.mirror.current
@@ -206,6 +207,7 @@ class Fetcher:
                         pkg.filename,
                     )
                     last_error = e
+                    checksum_failures += 1
                     self.mirror.blacklist_current()
                     self.mirror.next_mirror()
                     continue
@@ -220,6 +222,8 @@ class Fetcher:
                     break
                 continue
         
+        if checksum_failures >= 2:
+            raise ExtractionError(pkg.filename, "checksum mismatch after re-download on alternate mirror")
         raise DownloadError(str(last_error) or "All mirrors failed.")
 
     def _download_single(self, pkg: Package, display: 'MultiProgressDisplay', mirror_url: str) -> Path:
