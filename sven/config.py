@@ -87,6 +87,7 @@ class Config:
     def __init__(self, config_path: str = CONFIG_FILE):
         self._path   = config_path
         self._parser = configparser.ConfigParser()
+        self._created_on_load = False
         self._load()
 
     # ── Load ─────────────────────────────────────────────────
@@ -100,7 +101,8 @@ class Config:
         detected_init = detect_runtime_init_system()
         self._parser["general"]["init_system"] = detected_init
         cpu = os.cpu_count() or 1
-        self._parser["download"]["parallel_downloads"] = str(max(1, min(8, cpu // 2 or 1)))
+        # Use more aggressive parallelism: up to CPU count, min 4, max 16
+        self._parser["download"]["parallel_downloads"] = str(max(4, min(16, cpu)))
 
         # Read actual config if it exists
         if Path(self._path).exists():
@@ -112,6 +114,7 @@ class Config:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with open(path, "w") as f:
                     self._parser.write(f)
+                self._created_on_load = True
             except OSError:
                 pass
 
@@ -222,6 +225,14 @@ class Config:
         """Prepend install_root to a path."""
         root = self.install_root.rstrip("/")
         return f"{root}{path}" if root != "/" else path
+
+    @property
+    def path(self) -> str:
+        return self._path
+
+    @property
+    def was_created(self) -> bool:
+        return self._created_on_load
 
     # ── Debug ────────────────────────────────────────────────
 

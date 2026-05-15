@@ -39,7 +39,7 @@ class MultiProgressDisplay:
     def __init__(
         self,
         filenames: List[str],
-        window_size: int = 6,
+        window_size: int = 12,
         verbose: bool = False,
         shared_lock: Optional[threading.Lock] = None,
     ):
@@ -66,6 +66,7 @@ class MultiProgressDisplay:
         self._ever_rendered = False
         self._block_lines = self.window_size + 1
         self._last_render_ts = 0.0
+        self._is_rendering = False
 
         if not self.is_tty:
             print(
@@ -73,6 +74,32 @@ class MultiProgressDisplay:
                 flush=True,
             )
             return
+
+    def safe_print(self, message: str):
+        """
+        Safely print a message during progress rendering.
+        In TTY mode, this clears the progress block, prints the message,
+        then re-renders the progress to avoid corruption.
+        Must be called with the lock held by caller.
+        """
+        if not self.is_tty:
+            print(message, flush=True)
+            return
+
+        if self._ever_rendered:
+            # Clear the progress block
+            jump = self._block_lines
+            sys.stdout.write(f"\033[{jump}A")
+            for _ in range(jump):
+                sys.stdout.write("\r\033[2K\n")
+            sys.stdout.write(f"\033[{jump}A")
+
+        # Print the message
+        print(message, flush=True)
+
+        # Re-render progress if we had it
+        if self._ever_rendered:
+            self._render()
 
     def _assign_slot(self, filename: str, downloaded: int = 0, total: int = 0) -> bool:
         """Return True if filename is active in a slot (mutate state; caller holds lock)."""
@@ -187,81 +214,87 @@ class MultiProgressDisplay:
             self._render()
 
     def _render(self):
-        tw = _term_width()
-        jump = self._block_lines
+        if self._is_rendering:
+            return  # Prevent concurrent renders
+        self._is_rendering = True
+        try:
+            tw = _term_width()
+            jump = self._block_lines
 
-        if self._ever_rendered:
-            sys.stdout.write(f"\033[{jump}A")
+            if self._ever_rendered:
+                sys.stdout.write(f"\033[{jump}A")
 
-        slot_map: Dict[int, str] = {}
-        for fname, meta in self.active_slots.items():
-            slot_map[meta["slot"]] = fname
+            slot_map: Dict[int, str] = {}
+            for fname, meta in self.active_slots.items():
+                slot_map[meta["slot"]] = fname
 
-        name_len = min(22 if not self.verbose else 28, max(12, tw // 5))
-        overhead = 8 + name_len + 6 + 18
-        bar_width = max(10, tw - overhead)
+            name_len = min(22 if not self.verbose else 28, max(12, tw // 5))
+            overhead = 8 + name_len + 6 + 18
+            bar_width = max(10, tw - overhead)
 
-        for i in range(self.window_size):
-            sys.stdout.write("\r\033[2K")
-            if i in slot_map:
-                fname = slot_map[i]
-                data = self.active_slots[fname]
-                tot = data["tot"]
-                dl = data["dl"]
-                pct = (dl / tot) if tot > 0 else 0.0
-                pct_i = min(100, int(pct * 100))
-                filled = min(bar_width, int(pct * bar_width))
-                bar_fill = "█" * filled + "░" * (bar_width - filled)
-                if color_enabled and pct_i >= 100:
-                    bar = _style("\033[92m", bar_fill)
-                elif color_enabled:
-                    bar = _style("\033[36m", bar_fill)
+            for i in range(self.window_size):
+                sys.stdout.write("\r\033[2K")
+                if i in slot_map:
+                    fname = slot_map[i]
+                    data = self.active_slots[fname]
+                    tot = data["tot"]
+                    dl = data["dl"]
+                    pct = (dl / tot) if tot > 0 else 0.0
+                    pct_i = min(100, int(pct * 100))
+                    filled = min(bar_width, int(pct * bar_width))
+                    bar_fill = "█" * filled + "░" * (bar_width - filled)
+                    if color_enabled and pct_i >= 100:
+                        bar = _style("\033[92m", bar_fill)
+                    elif color_enabled:
+                        bar = _style("\033[36m", bar_fill)
+                    else:
+                        bar = bar_fill
+
+                    dl_mb = dl / 1_048_576
+                    tot_mb = tot / 1_048_576 if tot > 0 else 0.0
+                    name = self._format_name(fname, maxlen=name_len)
+                    pct_s = f"{pct_i:>3}%"
+                    
+                    # Show package size even in non-verbose if we have it
+                    size_str = f" ({dl_mb:.1f}/{tot_mb:.1f} MB)" if tot > 0 else ""
+                    
+                    line = f"   ▸ {name:<{name_len}}  [{bar}] {pct_s}{size_str}"
+                    sys.stdout.write(line[:tw] + "\n")
                 else:
-                    bar = bar_fill
+                    idle = "   · waiting…" if self.completed_count < self.total_count else "   · —"
+                    if self.verbose and self.completed_count < self.total_count:
+                        waiting_count = len(self._wait_fifo)
+                        if waiting_count > 0:
+                            idle = f"   · waiting… ({waiting_count} queued)"
+                    sys.stdout.write(_style("\033[90m", idle + "\n") if color_enabled else idle + "\n")
 
-                dl_mb = dl / 1_048_576
-                tot_mb = tot / 1_048_576 if tot > 0 else 0.0
-                name = self._format_name(fname, maxlen=name_len)
-                pct_s = f"{pct_i:>3}%"
-                
-                # Show package size even in non-verbose if we have it
-                size_str = f" ({dl_mb:.1f}/{tot_mb:.1f} MB)" if tot > 0 else ""
-                
-                line = f"   ▸ {name:<{name_len}}  [{bar}] {pct_s}{size_str}"
-                sys.stdout.write(line[:tw] + "\n")
+            sys.stdout.write("\r\033[2K")
+            
+            # Calculate global progress based on bytes if we have totals, otherwise fall back to count
+            known_tot = sum(self._file_totals.values())
+            if known_tot > 0:
+                current_dl = sum(self._file_downloaded.values())
+                gpct = current_dl / known_tot
             else:
-                idle = "   · waiting…" if self.completed_count < self.total_count else "   · —"
-                if self.verbose and self.completed_count < self.total_count:
-                    waiting_count = len(self._wait_fifo)
-                    if waiting_count > 0:
-                        idle = f"   · waiting… ({waiting_count} queued)"
-                sys.stdout.write(_style("\033[90m", idle + "\n") if color_enabled else idle + "\n")
-
-        sys.stdout.write("\r\033[2K")
-        
-        # Calculate global progress based on bytes if we have totals, otherwise fall back to count
-        known_tot = sum(self._file_totals.values())
-        if known_tot > 0:
-            current_dl = sum(self._file_downloaded.values())
-            gpct = current_dl / known_tot
-        else:
+                done = self.completed_count
+                total = self.total_count
+                gpct = done / total if total > 0 else 0.0
+                
+            g_pct_i = min(100, int(gpct * 100))
+            gw = max(12, tw - 44)
+            gf = min(gw, int(gpct * gw))
+            g_bar = "█" * gf + "░" * (gw - gf)
+            if color_enabled:
+                g_bar = _style("\033[94m", g_bar)
+            
             done = self.completed_count
             total = self.total_count
-            gpct = done / total if total > 0 else 0.0
-            
-        g_pct_i = min(100, int(gpct * 100))
-        gw = max(12, tw - 44)
-        gf = min(gw, int(gpct * gw))
-        g_bar = "█" * gf + "░" * (gw - gf)
-        if color_enabled:
-            g_bar = _style("\033[94m", g_bar)
-        
-        done = self.completed_count
-        total = self.total_count
-        tail = f"   Overall  [{g_bar}] {g_pct_i:>3}%  ({done}/{total} files done)\n"
-        sys.stdout.write(tail)
-        sys.stdout.flush()
-        self._ever_rendered = True
+            tail = f"   Overall  [{g_bar}] {g_pct_i:>3}%  ({done}/{total} files done)\n"
+            sys.stdout.write(tail)
+            sys.stdout.flush()
+            self._ever_rendered = True
+        finally:
+            self._is_rendering = False
 
     def finish_all(self):
         with self.lock:

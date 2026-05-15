@@ -120,10 +120,12 @@ class Fetcher:
         )
 
         if self.verbose:
-            print_info(f"Initializing parallel downloads (max {self.parallel} connections)...")
-            print_step(f"Mirror: {self.mirror.current}")
+            with ui_lock:
+                display.safe_print(f"Initializing parallel downloads (max {self.parallel} connections)...")
+                display.safe_print(f"Mirror: {self.mirror.current}")
         else:
-            print_info("   · waiting…")
+            with ui_lock:
+                display.safe_print("   · waiting…")
         
         self.mirror.begin_parallel_downloads()
         ulog = logging.getLogger("urllib3")
@@ -131,8 +133,9 @@ class Fetcher:
         ulog.setLevel(logging.ERROR)
         
         if verbose:
-            print_info(f"[DEBUG] ThreadPoolExecutor started with {self.parallel} workers")
-            print_info(f"[DEBUG] Socket default timeout: {DOWNLOAD_TIMEOUT}s")
+            with ui_lock:
+                display.safe_print(f"[DEBUG] ThreadPoolExecutor started with {self.parallel} workers")
+                display.safe_print(f"[DEBUG] Socket default timeout: {DOWNLOAD_TIMEOUT}s")
         try:
             with ThreadPoolExecutor(max_workers=self.parallel) as pool:
                 futures = {
@@ -155,9 +158,11 @@ class Fetcher:
             fetched = [p.filename for p in to_download]
             if verbose:
                 for name in fetched:
-                    print(f"   ✓ SHA256 verified: {name}")
+                    with ui_lock:
+                        display.safe_print(f"   ✓ SHA256 verified: {name}")
             else:
-                print(f"   ✓ SHA256 verified — {len(fetched)} package(s)")
+                with ui_lock:
+                    display.safe_print(f"   ✓ SHA256 verified — {len(fetched)} package(s)")
         finally:
             ulog.setLevel(ulog_prev)
             self.mirror.end_parallel_downloads()
@@ -182,7 +187,8 @@ class Fetcher:
             if self.verbose:
                 import time
                 start_dns = time.monotonic()
-                print(f"   [DEBUG] Connecting to mirror: {mirror_url}...")
+                with display.lock:
+                    display.safe_print(f"   [DEBUG] Connecting to mirror: {mirror_url}...")
             
             try:
                 # attempt the actual download
@@ -190,7 +196,8 @@ class Fetcher:
                 
                 if self.verbose:
                     lat = (time.monotonic() - start_dns) * 1000
-                    print(f"   [DEBUG] Mirror responded in {lat:.1f}ms")
+                    with display.lock:
+                        display.safe_print(f"   [DEBUG] Mirror responded in {lat:.1f}ms")
                 
                 # IMMEDIATE INTEGRITY CHECK
                 # If we got trash, we failing over to next mirror now!
@@ -260,10 +267,11 @@ class Fetcher:
         )
 
         if self.verbose:
-            print(f"   [DEBUG] HTTP GET {url}")
-            print(f"   [DEBUG] Request Headers: {headers}")
-            print(f"   [DEBUG] Response Status: {resp.status_code}")
-            print(f"   [DEBUG] Response Headers: {dict(resp.headers)}")
+            with display.lock:
+                display.safe_print(f"   [DEBUG] HTTP GET {url}")
+                display.safe_print(f"   [DEBUG] Request Headers: {headers}")
+                display.safe_print(f"   [DEBUG] Response Status: {resp.status_code}")
+                display.safe_print(f"   [DEBUG] Response Headers: {dict(resp.headers)}")
 
         # If server doesn't support Range, start over
         if resp.status_code == 200 and resume_pos > 0:
