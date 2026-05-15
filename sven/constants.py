@@ -18,7 +18,7 @@ except Exception:
     pass
 
 # ── Version ──────────────────────────────────────────────────
-VERSION       = "1.2.0"
+VERSION       = "1.2.5"
 CODENAME      = "Forge"
 
 # ── Identity ─────────────────────────────────────────────────

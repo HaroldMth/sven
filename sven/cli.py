@@ -165,9 +165,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── mirror ────────────────────────────────────────────────
     p_mirror = subparsers.add_parser("mirror", help="Mirror management")
+    p_mirror.add_argument(
+        "--rank",
+        action="store_true",
+        help="Benchmark mirrors and persist a ranked mirrorlist",
+    )
     mirror_sub = p_mirror.add_subparsers(dest="mirror_cmd")
     mirror_sub.add_parser("list",    help="Show available mirrors")
     mirror_sub.add_parser("fastest", help="Benchmark and pick fastest mirror")
+    mirror_sub.add_parser("rank", help="Benchmark mirrors and persist a ranked mirrorlist")
 
     # ── deps ──────────────────────────────────────────────────
     p_deps = subparsers.add_parser("deps", help="Show dependency tree")
@@ -182,8 +188,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_cnf = subparsers.add_parser("cnf", help="Command-not-found handler lookup")
     p_cnf.add_argument("cmd", metavar="COMMAND")
 
-    subparsers.add_parser("check-update", help="Check for a newer version of Sven")
-    subparsers.add_parser("self-update",  help="Download and install latest Sven release")
+    subparsers.add_parser("check-update",  help="Check for a newer version of Sven")
+    subparsers.add_parser("self-update",   help="Download and install latest Sven release")
+    subparsers.add_parser("self-remove",   help="Completely uninstall Sven from this system")
 
     return parser
 
@@ -228,9 +235,10 @@ def main():
 
     # constants.py natively captures --root from sys.argv at module load time.
     # We only need to sync the Config singleton.
+    from .config import get_config
+    config = get_config()
     if args.root:
-        from .config import get_config
-        get_config().install_root = args.root
+        config.install_root = args.root
 
     if args.command is None:
         if not (hasattr(args, "no_color") and args.no_color):
@@ -252,6 +260,13 @@ def main():
     if hasattr(args, "no_color") and args.no_color:
         from .ui.output import disable_colors
         disable_colors()
+
+    if config.was_created:
+        from .ui.output import print_info
+        print_info(
+            f"Created default config at {config.path} "
+            f"(init_system={config.init_system}, parallel_downloads={config.parallel_downloads})."
+        )
 
     if cmd == "install":
         from .commands.install import run
@@ -321,9 +336,16 @@ def main():
         run(args.snapshot_id if hasattr(args, 'snapshot_id') else None)
     elif cmd == "mirror":
         from .commands.mirror import run
-        run(benchmark=(args.mirror_cmd == "fastest" if hasattr(args, "mirror_cmd") else False))
+        mirror_cmd = args.mirror_cmd if hasattr(args, "mirror_cmd") else None
+        run(
+            benchmark=(mirror_cmd == "fastest"),
+            rank=(mirror_cmd == "rank" or getattr(args, "rank", False)),
+        )
     elif cmd == "self-update":
         from .commands.self_update import run
+        run()
+    elif cmd == "self-remove":
+        from .commands.self_remove import run
         run()
     elif cmd == "check-update":
         from .core.updater import run_check_update

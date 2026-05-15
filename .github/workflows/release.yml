@@ -5,9 +5,13 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  build:
+  build-and-release:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -16,7 +20,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install build dependencies
         run: |
           pip install requests zstandard python-gnupg pyinstaller
 
@@ -24,26 +28,27 @@ jobs:
         run: |
           make build
 
+      - name: Rename binary to match install.sh expectation
+        run: |
+          mv dist/sven dist/sven-linux-x86_64
+
       - name: Generate SHA256
         run: |
-          sha256sum dist/sven > dist/SHA256SUMS
+          sha256sum dist/sven-linux-x86_64 > dist/SHA256SUMS
 
-      - name: Rename binary
-        run: |
-          mv dist/sven dist/sven-x86_64-linux
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
+          generate_release_notes: true
           files: |
-            dist/sven-x86_64-linux
+            dist/sven-linux-x86_64
             dist/SHA256SUMS
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update AUR PKGBUILD checksums
         run: |
-          # The binary is out, modify PKGBUILD with its actual shasum
-          CSUM=$(cat dist/SHA256SUMS | awk '{print $1}')
+          CSUM=$(awk '{print $1}' dist/SHA256SUMS)
           sed -i "s/sha256sums=('SKIP')/sha256sums=('${CSUM}')/" PKGBUILD
           sed -i "s/pkgver=.*/pkgver=${GITHUB_REF_NAME#v}/" PKGBUILD
 
