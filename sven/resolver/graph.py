@@ -156,11 +156,9 @@ class DependencyGraph:
             # Recurse using the already-resolved package metadata when available.
             self.add_package(dep_str, required_by=name, resolved_pkg=dep_pkg)
             
-            # Add edge if the dependency was actually added as a node (not skipped/installed)
-            # Actually, topological sorter needs all edges. 
-            # If dep is already installed, it's not a node in "to-install" graph.
-            if dep_name in self.nodes:
-                self.edges[name].add(dep_name)
+            # Use the canonical package name for the edge
+            if dep_pkg and dep_pkg.name in self.nodes:
+                self.edges[name].add(dep_pkg.name)
 
         # Track optional deps
         if pkg.optdeps:

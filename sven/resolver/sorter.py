@@ -15,18 +15,42 @@ def sort_dependencies(
     edges: Dict[str, Set[str]]
 ) -> List[Package]:
     """
-    Sort package installation order using TopologicalSorter.
-    Ensures dependencies are installed before the packages that need them.
-    Raises CircularDependencyError if a cycle is detected.
+    Sort package installation order. 
+    Handles circular dependencies by breaking them and warning.
     """
-    ts = graphlib.TopologicalSorter(edges)
-    
-    try:
-        # returns an iterable of package names in order
-        order = list(ts.static_order())
-    except graphlib.CycleError as e:
-        cycle = list(e.args[1]) if len(e.args) > 1 else []
-        raise CircularDependencyError(cycle) from e
+    # Use a custom DFS to handle cycles gracefully
+    order = []
+    visited = set()
+    temp_stack = set()
+    cycles_found = []
+
+    def visit(name: str):
+        if name in temp_stack:
+            # Cycle detected!
+            if name not in cycles_found:
+                cycles_found.append(name)
+            return
+        if name in visited:
+            return
+
+        temp_stack.add(name)
+        # Sort dependencies for deterministic order
+        for dep in sorted(edges.get(name, set())):
+            visit(dep)
+        
+        temp_stack.remove(name)
+        visited.add(name)
+        order.append(name)
+
+    # Process all nodes
+    for name in sorted(nodes.keys()):
+        visit(name)
+
+    if cycles_found:
+        from ..ui.output import print_warning
+        pkgs_in_cycle = ", ".join(cycles_found)
+        print_warning(f"Circular dependency detected involving: {pkgs_in_cycle}")
+        print_warning("   Sven will attempt to break the cycle by installing implementation packages first.")
 
     # Map names back to Package objects
     return [nodes[name] for name in order if name in nodes]

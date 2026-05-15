@@ -228,9 +228,18 @@ class SyncDB:
                         self._index[pkg.name] = pkg
                         # Index all provides as virtual → real
                         for prov in pkg.provides:
-                            # Strip version constraint e.g. "sh=1.0" → "sh"
-                            virt = prov.split("=")[0].split(">")[0].split("<")[0]
-                            self._provides[virt.strip()] = pkg.name
+                            virt = prov.split("=")[0].split(">")[0].split("<")[0].strip()
+                            # Priority: if virt is libgl, prefer libglvnd over mesa
+                            if virt == "libgl":
+                                if pkg.name == "libglvnd":
+                                    self._provides[virt] = pkg.name
+                                elif pkg.name == "mesa" and virt not in self._provides:
+                                    self._provides[virt] = pkg.name
+                                continue
+                            
+                            # Default: first one wins or overwrite if not already set to exact match
+                            if virt not in self._provides:
+                                self._provides[virt] = pkg.name
 
         except tarfile.TarError:
             # Keep the sync DB resilient: a bad local fixture or partial download
