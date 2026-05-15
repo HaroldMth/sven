@@ -3,7 +3,6 @@ __pycache__/
 *.pyo
 dist/
 build/
-*.spec
 *.egg-info/
 .env
 .venv/
