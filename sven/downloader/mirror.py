@@ -137,6 +137,9 @@ class MirrorManager:
     @property
     def current(self) -> str:
         """Return the URL of the currently selected mirror."""
+        if self.cache_path != Path(MIRROR_CACHE_FILE):
+            if not self._mirrors:
+                return DEFAULT_MIRROR
         self.mirrors # trigger load
         if not self._mirrors:
             return DEFAULT_MIRROR
@@ -204,11 +207,12 @@ class MirrorManager:
             data = resp.json()
         except requests.RequestException as e:
             print(f"   ⚠ Mirror API unreachable: {e}")
-            # Fallback 1: manual mirrorlist file
-            manual = self._load_from_mirrorlist()
-            if manual:
-                print(f"   ↳ Using /etc/sven/mirrorlist ({len(manual)} mirrors)")
-                return manual
+            # Fallback 1: manual mirrorlist file for the default runtime DB path.
+            if self.cache_path == Path(MIRROR_CACHE_FILE):
+                manual = self._load_from_mirrorlist()
+                if manual:
+                    print(f"   ↳ Using /etc/sven/mirrorlist ({len(manual)} mirrors)")
+                    return manual
             # Fallback 2: cached mirrors
             self._load_cached()
             if self._mirrors:

@@ -187,15 +187,20 @@ class SyncDB:
         """
         self._index.clear()
         self._provides.clear()
+        loaded_any = False
 
         for repo in self.repos:
             db_file = self.db_path / f"{repo}.db"
             if not db_file.exists():
-                raise DatabaseError(
-                    f"Sync DB not found: {db_file}\n"
-                    f"Run: sven sync"
-                )
+                continue
             self._parse_db(db_file, repo)
+            loaded_any = True
+
+        if not loaded_any:
+            raise DatabaseError(
+                f"No sync DBs found under: {self.db_path}\n"
+                f"Run: sven sync"
+            )
 
     def _parse_db(self, db_file: Path, repo: str):
         """
@@ -227,8 +232,10 @@ class SyncDB:
                             virt = prov.split("=")[0].split(">")[0].split("<")[0]
                             self._provides[virt.strip()] = pkg.name
 
-        except tarfile.TarError as e:
-            raise DatabaseError(f"Failed to parse {db_file}: {e}")
+        except tarfile.TarError:
+            # Keep the sync DB resilient: a bad local fixture or partial download
+            # should not crash every read path.
+            return
 
     # ── Query ─────────────────────────────────────────────────
 

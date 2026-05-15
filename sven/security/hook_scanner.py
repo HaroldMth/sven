@@ -8,6 +8,28 @@ from pathlib import Path
 from typing import NamedTuple
 from .patterns import DANGEROUS_PATTERNS, SAFE_PATTERNS
 
+
+def _pattern_label(regex: str) -> str:
+    labels = {
+        r"\bcurl\b.*\|\s*(bash|sh)": "curl",
+        r"\bwget\b.*\|\s*(bash|sh)": "wget",
+        r"\bbash\s+-c": "bash -c",
+        r"\bsh\s+-c": "sh -c",
+        r"\beval\b": "eval",
+        r"\bexec\b\s+(bash|\$|\`|\$\()": "exec",
+        r"\bnc\b": "nc",
+        r"\bncat\b": "ncat",
+        r"/dev/tcp": "/dev/tcp",
+        r"base64\s+-d": "base64 -d",
+        r"\bpython\s+-c": "python -c",
+        r"\bperl\s+-e": "perl -e",
+        r"\bruby\s+-e": "ruby -e",
+        r"\bdd\s+if": "dd if",
+        r"\bmkfifo\b": "mkfifo",
+        r"\brm\s+-rf\s+/": "rm -rf /",
+    }
+    return labels.get(regex, regex)
+
 class Finding(NamedTuple):
     line_number: int
     line_content: str
@@ -49,7 +71,7 @@ def scan_file(filepath: str) -> list[Finding]:
                 findings.append(Finding(
                     line_number=line_no,
                     line_content=stripped[:120],
-                    pattern_matched=p.regex,
+                    pattern_matched=_pattern_label(p.regex),
                     severity=p.severity
                 ))
 
@@ -93,7 +115,7 @@ def prompt_hook_approval(pkg_name: str, result: ScanResult) -> str:
     
     for f in result.findings:
         # Resolve pattern
-        pattern_dict = {p.regex: p for p in DANGEROUS_PATTERNS}
+        pattern_dict = {_pattern_label(p.regex): p for p in DANGEROUS_PATTERNS}
         desc = pattern_dict.get(f.pattern_matched).description if f.pattern_matched in pattern_dict else ""
         print(f"   → Line {f.line_number}: {f.line_content}  [{f.severity} - {desc}]")
         

@@ -63,7 +63,7 @@ ARCH_REPOS    = ["core", "extra", "multilib"]
 ARCH_ARCH     = "x86_64"
 
 # ── Default Mirror ───────────────────────────────────────────
-DEFAULT_MIRROR         = "https://geo.mirror.pkgbuild.com"
+DEFAULT_MIRROR         = "https://mirror.rackspace.com/archlinux"
 ARCH_MIRROR_STATUS_URL = "https://archlinux.org/mirrors/status/json/"
 
 # ── Mirror DB URL Template ───────────────────────────────────

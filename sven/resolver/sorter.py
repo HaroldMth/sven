@@ -25,8 +25,8 @@ def sort_dependencies(
         # returns an iterable of package names in order
         order = list(ts.static_order())
     except graphlib.CycleError as e:
-        # Fallback to naive list for circular dependencies
-        return list(nodes.values())
+        cycle = list(e.args[1]) if len(e.args) > 1 else []
+        raise CircularDependencyError(cycle) from e
 
     # Map names back to Package objects
     return [nodes[name] for name in order if name in nodes]
