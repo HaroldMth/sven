@@ -81,6 +81,25 @@ def run(package: str, list_files: bool = False):
     local = LocalDB()
     pkg = local.get(package)
     if not pkg:
+        needle = package.strip().lower()
+        # Try installed package names first.
+        for candidate in local.all_packages():
+            if candidate.name.lower() == needle or needle in candidate.name.lower():
+                pkg = candidate
+                break
+
+    if not pkg:
+        # Fallback to fuzzy search by DB directory names (name-version).
+        for entry in local.db_path.iterdir():
+            if not entry.is_dir():
+                continue
+            if needle in entry.name.lower():
+                parsed = local._read_pkg_dir(entry)
+                if parsed:
+                    pkg = parsed
+                    break
+
+    if not pkg:
         print_error(f"Package '{package}' is not installed.")
         sys.exit(1)
 

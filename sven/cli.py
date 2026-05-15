@@ -153,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── orphans ───────────────────────────────────────────────
     subparsers.add_parser("orphans", help="List unneeded packages")
+    subparsers.add_parser("adopt-installed", help="Reconcile installed DB entries into LocalDB cache")
 
     # ── snapshots ─────────────────────────────────────────────
     subparsers.add_parser("snapshots", help="List all rollback snapshots")
@@ -308,6 +309,9 @@ def main():
         run(args.package if hasattr(args, "package") else None)
     elif cmd == "orphans":
         from .commands.orphans import run
+        run()
+    elif cmd == "adopt-installed":
+        from .commands.adopt_installed import run
         run()
     elif cmd == "snapshots":
         from .commands.snapshots import run
