@@ -155,30 +155,45 @@ ok "Layout under /etc/sven, /var/lib/sven, /var/cache/sven is ready."
 step 3 "Installing the sven binary"
 CP_FLAGS=()
 [ "$VERBOSE" -eq 1 ] && CP_FLAGS=(-v)
+BINARY_DST="/usr/bin/sven"
 
 if [ -f "$REPO_ROOT/dist/sven" ]; then
-  vtime cp "${CP_FLAGS[@]}" "$REPO_ROOT/dist/sven" /usr/bin/sven
+  vtime cp "${CP_FLAGS[@]}" "$REPO_ROOT/dist/sven" "$BINARY_DST"
 elif [ -f "$REPO_ROOT/sven" ]; then
-  vtime cp "${CP_FLAGS[@]}" "$REPO_ROOT/sven" /usr/bin/sven
+  vtime cp "${CP_FLAGS[@]}" "$REPO_ROOT/sven" "$BINARY_DST"
 else
+  TMP_BIN="$(mktemp /tmp/sven-bin.XXXXXX)"
+  cleanup_tmp_bin() {
+    [ -f "$TMP_BIN" ] && rm -f "$TMP_BIN"
+  }
+  trap cleanup_tmp_bin EXIT
+
   if [ "$SVEN_VERSION" = "latest" ]; then
     info "No local binary in dist/ — downloading latest release…"
-    LATEST_URL="https://github.com/haroldmth/sven/releases/latest/download/sven-linux-x86_64"
+    LATEST_URL="https://github.com/HaroldMth/sven/releases/latest/download/sven-linux-x86_64"
   else
     info "No local binary in dist/ — downloading Sven v$SVEN_VERSION…"
-    LATEST_URL="https://github.com/haroldmth/sven/releases/download/v${SVEN_VERSION}/sven-linux-x86_64"
+    LATEST_URL="https://github.com/HaroldMth/sven/releases/download/v${SVEN_VERSION}/sven-linux-x86_64"
   fi
+
   if command -v wget &>/dev/null; then
-    vtime wget -q --show-progress "$LATEST_URL" -O /usr/bin/sven
+    vtime wget -q --show-progress "$LATEST_URL" -O "$TMP_BIN"
   elif command -v curl &>/dev/null; then
-    vtime curl -fL --progress-bar "$LATEST_URL" -o /usr/bin/sven
+    vtime curl -fL --progress-bar "$LATEST_URL" -o "$TMP_BIN"
   else
     fail "Need wget or curl to download the binary."
   fi
+
+  [ -s "$TMP_BIN" ] || fail "Download produced an empty binary. Check network/SSL inside chroot and retry."
+  vtime mv "$TMP_BIN" "$BINARY_DST"
+  trap - EXIT
 fi
 
-chmod +x /usr/bin/sven
-ok "Installed → /usr/bin/sven"
+chmod +x "$BINARY_DST"
+if ! "$BINARY_DST" --version >/dev/null 2>&1; then
+  fail "Installed binary is not runnable. Verify architecture, executable mount options, and download integrity."
+fi
+ok "Installed → $BINARY_DST"
 
 step 4 "Seven OS adoption (optional)"
 if [ "$SKIP_ADOPT" -eq 1 ]; then
