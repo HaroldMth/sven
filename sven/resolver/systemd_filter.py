@@ -10,6 +10,7 @@
 # ============================================================
 
 from typing import NamedTuple
+from pathlib import Path
 
 from ..db.models import Package
 from ..exceptions import SystemdDependencyError
@@ -71,8 +72,10 @@ def check_systemd_deps(pkg: Package, init_system: str = "sysvinit") -> SystemdCh
     # or "systemd os" are treated as systemd-capable environments.
     normalized_init = (init_system or "").strip().lower()
 
-    # If we're on systemd, everything is fine
-    if normalized_init == "systemd" or normalized_init.startswith("systemd-") or normalized_init.startswith("systemd "):
+    runtime_systemd = Path("/run/systemd/private").exists()
+
+    # If we're on systemd (configured or detected), everything is fine
+    if runtime_systemd or normalized_init == "systemd" or normalized_init.startswith("systemd-") or normalized_init.startswith("systemd "):
         return SystemdCheckResult(
             safe=True, hard_deps=[], soft_deps=[],
             alternatives={}, source_build_advised=False,

@@ -59,6 +59,24 @@ ok()    { echo -e "${GREEN}[  ✓ ]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[ !! ]${NC} $1"; }
 fail()  { echo -e "${RED}[FAIL]${NC} $1"; exit 1; }
 
+detect_init_system() {
+  if [ -S /run/systemd/private ]; then
+    echo "systemd"
+    return
+  fi
+  if command -v systemctl >/dev/null 2>&1; then
+    if systemctl is-system-running >/dev/null 2>&1; then
+      echo "systemd"
+      return
+    fi
+  fi
+  if [ -r /proc/1/comm ] && grep -qi systemd /proc/1/comm; then
+    echo "systemd"
+    return
+  fi
+  echo "sysvinit"
+}
+
 STEP_TOTAL=5
 step() {
   local n="$1"; shift
@@ -137,6 +155,21 @@ if [ "$VERBOSE" -eq 0 ]; then
   echo -e "      ${DIM}All required tools are available (${REQUIRED[*]}).${NC}"
 fi
 
+HAS_REQUESTS=1
+if ! python3 -c "import requests" >/dev/null 2>&1; then
+  warn "Python module 'requests' is missing."
+  if python3 -m pip --version >/dev/null 2>&1; then
+    info "Attempting to install requests via pip..."
+    if ! python3 -m pip install --upgrade requests; then
+      HAS_REQUESTS=0
+      warn "Automatic requests install failed. Adoption will be skipped."
+    fi
+  else
+    HAS_REQUESTS=0
+    warn "pip is unavailable; adoption will be skipped (or use --skip-adopt)."
+  fi
+fi
+
 step 2 "Creating directories"
 vtime mkdir -p \
   /etc/sven \
@@ -151,6 +184,45 @@ if [ -f "$REPO_ROOT/sven/ui/sven-cnf.sh" ]; then
 fi
 
 ok "Layout under /etc/sven, /var/lib/sven, /var/cache/sven is ready."
+
+INIT_SYSTEM_DETECTED="$(detect_init_system)"
+CPU_COUNT="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+PARALLEL_DOWNLOADS_DETECTED=$((CPU_COUNT / 2))
+if [ "$PARALLEL_DOWNLOADS_DETECTED" -lt 1 ]; then
+  PARALLEL_DOWNLOADS_DETECTED=1
+elif [ "$PARALLEL_DOWNLOADS_DETECTED" -gt 8 ]; then
+  PARALLEL_DOWNLOADS_DETECTED=8
+fi
+cat > /etc/sven/sven.conf <<EOF
+[general]
+install_root = /
+cache_dir = /var/cache/sven
+db_path = /var/lib/sven
+log_file = /var/log/sven/sven.log
+init_system = ${INIT_SYSTEM_DETECTED}
+
+[repos]
+use_official = true
+use_aur = true
+aur_review = prompt
+
+[build]
+build_dir = /tmp/sven/aur
+keep_cache = true
+parallel_jobs = 4
+
+[download]
+parallel_downloads = ${PARALLEL_DOWNLOADS_DETECTED}
+mirror = auto
+
+[upgrade]
+ignored_packages =
+held_packages =
+
+[safety]
+protected_packages = glibc linux-api-headers filesystem gcc binutils glibc-locales bash coreutils linux-firmware make patch m4 perl python gawk grep sed findutils tar gzip bzip2 xz zstd util-linux procps-ng e2fsprogs shadow less zlib openssl libffi pcre2 expat libcap libxml2 ncurses readline sqlite pkgconf ca-certificates curl wget
+EOF
+ok "Wrote /etc/sven/sven.conf (detected init_system=${INIT_SYSTEM_DETECTED})."
 
 step 3 "Installing the sven binary"
 CP_FLAGS=()
@@ -209,6 +281,8 @@ ok "Installed → $BINARY_DST"
 step 4 "Seven OS adoption (optional)"
 if [ "$SKIP_ADOPT" -eq 1 ]; then
   info "Skipping adoption scripts (--skip-adopt)."
+elif [ "$HAS_REQUESTS" -eq 0 ]; then
+  warn "Skipping adoption scripts because python3 'requests' is not installed."
 elif [ -f "$ADOPT_DIR/adopt_lfs.py" ]; then
   if [ "$VERBOSE" -eq 1 ]; then
     info "PYTHONPATH=$REPO_ROOT python3 $ADOPT_DIR/adopt_lfs.py"

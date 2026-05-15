@@ -14,7 +14,23 @@ from .constants import (
     INIT_SYSVINIT, SUPPORTED_INIT,
     PARALLEL_DOWNLOADS,
 )
-from .exceptions import ConfigNotFoundError, InvalidConfigError
+from .exceptions import InvalidConfigError
+
+
+def detect_runtime_init_system() -> str:
+    """
+    Best-effort runtime init detection.
+    Prefers systemd when PID 1/runtime socket indicates it is active.
+    """
+    if Path("/run/systemd/private").exists():
+        return "systemd"
+    try:
+        comm = Path("/proc/1/comm").read_text().strip().lower()
+        if "systemd" in comm:
+            return "systemd"
+    except OSError:
+        pass
+    return INIT_SYSVINIT
 
 
 # ── Defaults ─────────────────────────────────────────────────
@@ -80,10 +96,24 @@ class Config:
         for section, values in DEFAULTS.items():
             self._parser[section] = values
 
+        # Auto-tune defaults on first run
+        detected_init = detect_runtime_init_system()
+        self._parser["general"]["init_system"] = detected_init
+        cpu = os.cpu_count() or 1
+        self._parser["download"]["parallel_downloads"] = str(max(1, min(8, cpu // 2 or 1)))
+
         # Read actual config if it exists
         if Path(self._path).exists():
             self._parser.read(self._path)
-        # No config file is fine — defaults are used
+        else:
+            # First run: create config file with detected defaults.
+            path = Path(self._path)
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with open(path, "w") as f:
+                    self._parser.write(f)
+            except OSError:
+                pass
 
         self._validate()
 
@@ -122,7 +152,12 @@ class Config:
 
     @property
     def init_system(self) -> str:
-        return self._parser.get("general", "init_system").lower()
+        configured = self._parser.get("general", "init_system").lower()
+        runtime = detect_runtime_init_system()
+        # Runtime systemd detection takes precedence to avoid false sysvinit filtering.
+        if runtime == "systemd":
+            return "systemd"
+        return configured
 
     # ── Repos ────────────────────────────────────────────────
 
