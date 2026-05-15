@@ -177,9 +177,13 @@ else
   fi
 
   if command -v wget &>/dev/null; then
-    vtime wget -q --show-progress "$LATEST_URL" -O "$TMP_BIN"
+    if ! vtime wget -q --show-progress "$LATEST_URL" -O "$TMP_BIN"; then
+      fail "Failed to download Sven binary from: $LATEST_URL (wget error)."
+    fi
   elif command -v curl &>/dev/null; then
-    vtime curl -fL --progress-bar "$LATEST_URL" -o "$TMP_BIN"
+    if ! vtime curl -fL --progress-bar "$LATEST_URL" -o "$TMP_BIN"; then
+      fail "Failed to download Sven binary from: $LATEST_URL (curl error)."
+    fi
   else
     fail "Need wget or curl to download the binary."
   fi
