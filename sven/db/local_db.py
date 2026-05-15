@@ -8,6 +8,7 @@ import os
 import time
 import json
 import fcntl
+import shutil
 import logging
 from pathlib import Path
 from typing import Optional
@@ -211,17 +212,6 @@ class LocalDB:
             p for p in self.auto_packages()
             if p.name not in all_deps
         ]
-
-    def unregister(self, name: str):
-        """Remove a package from the database."""
-        if not self.is_installed(name):
-            return
-            
-        pkg = self._cache.pop(name)
-        pkg_dir = self.db_path / pkg.full_name
-        
-        if pkg_dir.exists():
-            shutil.rmtree(pkg_dir)
 
     def remove(self, name: str):
         self.unregister(name)
