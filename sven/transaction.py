@@ -63,6 +63,7 @@ class Transaction:
         self.config = get_config()
         self.local_db = LocalDB()
         self.rollback = RollbackManager()
+        self.verbose = False
         
         # Ensure log dir exists
         log_path = Path(self.config.rooted(LOG_DIR))
