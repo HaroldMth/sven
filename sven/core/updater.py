@@ -19,6 +19,33 @@ REPO_LATEST_API = "https://api.github.com/repos/haroldmth/sven/releases/latest"
 UPDATE_CACHE_FILE = f"{DB_BASE}/update_check.json"
 CHECK_INTERVAL = 86400  # 24 hours in seconds
 
+def _pick_release_asset(assets: list[dict]) -> str | None:
+    names = [(a.get("name", ""), a.get("browser_download_url")) for a in assets]
+    for name, url in names:
+        lower = name.lower()
+        if "linux-x86_64" in lower:
+            return url
+    for name, url in names:
+        lower = name.lower()
+        if "sven-linux" in lower:
+            return url
+    for name, url in names:
+        lower = name.lower()
+        if lower.endswith(".json") or lower.endswith(".md"):
+            continue
+        if url:
+            return url
+    return None
+
+
+def source_tree_install_detected() -> bool:
+    argv0 = Path(sys.argv[0]).name.lower()
+    if argv0 == "run_sven.py":
+        return True
+    py_path = os.environ.get("PYTHONPATH", "")
+    return "desktop/sven" in py_path.lower() or "/sources/sven" in py_path.lower()
+
+
 def get_latest_version(force=False):
     """
     Checks GitHub API for the latest release tag.
@@ -45,11 +72,7 @@ def get_latest_version(force=False):
         latest_tag = release_data.get("tag_name", "").lstrip("v")
         
         # Find asset URL for standalone bin
-        download_url = None
-        for asset in release_data.get("assets", []):
-            if "linux-x86_64" in asset.get("name", ""):
-                download_url = asset.get("browser_download_url")
-                break
+        download_url = _pick_release_asset(release_data.get("assets", []))
         
         # Update cache
         if latest_tag:
@@ -86,7 +109,7 @@ def check_for_updates_silently():
 def run_check_update():
     """Explicit sven check-update command."""
     print_info("Contacting GitHub for version information...")
-    latest, _ = get_latest_version(force=True)
+    latest, url = get_latest_version(force=True)
     
     if not latest:
         print_error("Failed to reach GitHub. Check your internet connection.")
@@ -98,4 +121,9 @@ def run_check_update():
     if latest == VERSION:
         print_success("Sven is already fully up to date.")
     else:
-        print_info(f"Update available! Use 'sudo sven self-update' to upgrade to v{latest}.")
+        if source_tree_install_detected() and not url:
+            print_info(
+                "source-tree install detected — download binary manually or run install.sh"
+            )
+        else:
+            print_info(f"Update available! Use 'sudo sven self-update' to upgrade to v{latest}.")

@@ -23,7 +23,7 @@ def run():
         print("   Try: sudo sven self-update")
         sys.exit(1)
 
-    from ..core.updater import get_latest_version
+    from ..core.updater import get_latest_version, source_tree_install_detected
     
     print_info("Contacting GitHub API...")
     latest_tag, download_url = get_latest_version(force=True)
@@ -40,7 +40,10 @@ def run():
         sys.exit(0)
 
     if not download_url:
-        print_error("Release exists, but Linux standalone binary was not found in assets.")
+        if source_tree_install_detected():
+            print_info("source-tree install detected — download binary manually or run install.sh")
+        else:
+            print_error("Release exists, but Linux standalone binary was not found in assets.")
         sys.exit(1)
 
     print()
@@ -85,4 +88,3 @@ def run():
     except Exception as e:
         print_error(f"Failed to write executable to {executable_path}: {e}")
         sys.exit(1)
-
