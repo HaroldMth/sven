@@ -5,6 +5,7 @@
 # ============================================================
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Set, Dict, List
 from ..db.models import Package
 from ..db.sync_db import SyncDB
@@ -75,12 +76,14 @@ class DependencyGraph:
         sync_db: SyncDB,
         aur_db: AURDB,
         local_db: LocalDB,
-        include_makedeps: bool = False
+        include_makedeps: bool = False,
+        resolve_workers: int = 4,
     ):
         self.sync_db = sync_db
         self.aur_db  = aur_db
         self.local_db = local_db
         self.include_makedeps = include_makedeps
+        self.resolve_workers = max(1, resolve_workers)
 
         # Node map: name -> Package
         self.nodes: Dict[str, Package] = {}
@@ -89,7 +92,12 @@ class DependencyGraph:
         # Optional deps collected for reporting
         self.optdeps: Dict[str, List[str]] = {}
 
-    def add_package(self, pkg_name: str, required_by: Optional[str] = None):
+    def add_package(
+        self,
+        pkg_name: str,
+        required_by: Optional[str] = None,
+        resolved_pkg: Optional[Package] = None,
+    ):
         """
         Recursively add a package and its dependencies to the graph.
         """
@@ -113,38 +121,16 @@ class DependencyGraph:
             # For this Phase 2, we skip installed packages in the DAG.
             return
 
-        # 2. Check Graph Cache (already resolving this)
-        if name in self.nodes:
-            # Node exists, just need to update version constraints if any
-            pkg = self.nodes[name]
+        pkg = resolved_pkg or self._resolve_package(name, op, req_ver, required_by)
+
+        # 2. Check Graph Cache (already resolving this package by its REAL name)
+        if pkg.name in self.nodes:
             if op and req_ver:
-                self._check_version(pkg, op, req_ver)
+                self._check_version(self.nodes[pkg.name], op, req_ver)
             return
 
-        # 3. Check SyncDB
-        pkg = self.sync_db.get(name)
-
-        # If we have an exact version requirement and SyncDB version doesn't match,
-        # OR if not in SyncDB, check CACHE.
-        if op == "=" and req_ver:
-            if not pkg or pkg.version != req_ver:
-                cache_pkg = self._find_in_cache(name, req_ver)
-                if cache_pkg:
-                    pkg = cache_pkg
-
-        if not pkg:
-            # 4. Try AUR if enabled
-            if self.aur_db:
-                pkg = self.aur_db.info(name)
-
-        if not pkg:
-            raise DependencyNotFoundError(name, required_by or "user request")
-
-        # 5. Build/Version check
-        if op and req_ver:
-            self._check_version(pkg, op, req_ver)
-
-        # Add to graph
+        # Add to graph using the REAL package name as the primary key
+        name = pkg.name
         self.nodes[name] = pkg
         self.edges[name] = set()
 
@@ -162,11 +148,13 @@ class DependencyGraph:
             if "debugedit" not in deps_to_resolve:
                 deps_to_resolve.append("debugedit")
 
-        for dep_str in deps_to_resolve:
+        resolved_deps = self._resolve_dependencies_parallel(deps_to_resolve, required_by=name)
+
+        for dep_str, dep_pkg in resolved_deps:
             dep_name, _, _ = parse_dep(dep_str)
-            
-            # Recurse
-            self.add_package(dep_str, required_by=name)
+
+            # Recurse using the already-resolved package metadata when available.
+            self.add_package(dep_str, required_by=name, resolved_pkg=dep_pkg)
             
             # Add edge if the dependency was actually added as a node (not skipped/installed)
             # Actually, topological sorter needs all edges. 
@@ -182,6 +170,76 @@ class DependencyGraph:
         # Disabled for demonstration purposes since we don't have
         # a fully Arch-compliant libalpm version parser.
         pass
+
+    def _resolve_package(
+        self,
+        name: str,
+        op: Optional[str],
+        req_ver: Optional[str],
+        required_by: Optional[str],
+    ) -> Package:
+        """Resolve a single package from sync DB, cache, or AUR."""
+        pkg = self.sync_db.get(name)
+
+        # If we have an exact version requirement and SyncDB version doesn't match,
+        # OR if not in SyncDB, check CACHE.
+        if op == "=" and req_ver:
+            if not pkg or pkg.version != req_ver:
+                cache_pkg = self._find_in_cache(name, req_ver)
+                if cache_pkg:
+                    pkg = cache_pkg
+
+        if not pkg and self.aur_db:
+            pkg = self.aur_db.info(name)
+
+        if not pkg:
+            raise DependencyNotFoundError(name, required_by or "user request")
+
+        if op and req_ver:
+            self._check_version(pkg, op, req_ver)
+
+        return pkg
+
+    def _resolve_dependency(self, dep_str: str, required_by: str) -> tuple[str, Optional[Package]]:
+        """
+        Resolve dependency metadata in parallel before recursing into the graph.
+        Installed dependencies are returned as None so the recursion can skip them.
+        """
+        dep_name, op, req_ver = parse_dep(dep_str)
+
+        if dep_name in self.nodes:
+            if op and req_ver:
+                self._check_version(self.nodes[dep_name], op, req_ver)
+            return dep_str, self.nodes[dep_name]
+
+        installed = self.local_db.get(dep_name)
+        if installed:
+            if op and req_ver:
+                self._check_version(installed, op, req_ver)
+            return dep_str, None
+
+        return dep_str, self._resolve_package(dep_name, op, req_ver, required_by)
+
+    def _resolve_dependencies_parallel(
+        self,
+        deps_to_resolve: list[str],
+        *,
+        required_by: str,
+    ) -> list[tuple[str, Optional[Package]]]:
+        """
+        Resolve dependency metadata concurrently while keeping graph mutation
+        deterministic and single-threaded.
+        """
+        if len(deps_to_resolve) <= 1:
+            return [self._resolve_dependency(dep_str, required_by) for dep_str in deps_to_resolve]
+
+        max_workers = min(self.resolve_workers, len(deps_to_resolve))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(self._resolve_dependency, dep_str, required_by)
+                for dep_str in deps_to_resolve
+            ]
+            return [future.result() for future in futures]
 
     def _find_in_cache(self, name: str, req_ver: str) -> Optional[Package]:
         """

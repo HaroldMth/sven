@@ -134,8 +134,8 @@ def run(package: str, list_files: bool = False):
                 pass
             print(f"      {p}{mark}")
     else:
-        bins = [f for f in rel_files if _is_bin_path(f)]
-        show = sorted(bins, key=_priority_bin)[:20]
+        bins = sorted(list(set(f for f in rel_files if _is_bin_path(f))), key=_priority_bin)
+        show = bins[:20]
         print(f"   Tracked files  : {len(rel_files)}")
         print("   Notable paths (bin directories first):")
         for line in show:
