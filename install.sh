@@ -161,6 +161,13 @@ if [ -f "$REPO_ROOT/dist/sven" ]; then
   vtime cp "${CP_FLAGS[@]}" "$REPO_ROOT/dist/sven" "$BINARY_DST"
 elif [ -f "$REPO_ROOT/sven" ]; then
   vtime cp "${CP_FLAGS[@]}" "$REPO_ROOT/sven" "$BINARY_DST"
+elif [ -f "$REPO_ROOT/run_sven.py" ]; then
+  info "No built binary found — creating source-tree launcher from run_sven.py"
+  cat > "$BINARY_DST" <<EOF
+#!/bin/bash
+export PYTHONPATH="$REPO_ROOT"
+exec python3 "$REPO_ROOT/run_sven.py" "\$@"
+EOF
 else
   TMP_BIN="$(mktemp /tmp/sven-bin.XXXXXX)"
   cleanup_tmp_bin() {
