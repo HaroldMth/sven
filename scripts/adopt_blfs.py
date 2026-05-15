@@ -17,9 +17,9 @@ Or with PYTHONPATH:
     PYTHONPATH=/home/harold/Desktop/sven python3 scripts/adopt_blfs.py
 """
 
-import sys
+import argparse
 import os
-import re
+import sys
 from pathlib import Path
 
 # Add project to path
@@ -100,7 +100,8 @@ def scan_include_dirs() -> set[str]:
 
 def match_packages(sync_db: SyncDB, local_db: LocalDB,
                    system_libs: set, system_bins: set,
-                   system_pcs: set, system_includes: set) -> list[Package]:
+                   system_pcs: set, system_includes: set,
+                   min_score: int = 5) -> list[Package]:
     """
     Match system artifacts against SyncDB entries.
     Returns a list of Package objects that should be adopted.
@@ -160,7 +161,7 @@ def match_packages(sync_db: SyncDB, local_db: LocalDB,
                 reasons.append(f"lib: {alt_so}")
 
         # Threshold: need at least one strong match
-        if score >= 5:
+        if score >= min_score:
             candidates.append((pkg, score, reasons))
 
     # Sort by score descending
@@ -168,7 +169,7 @@ def match_packages(sync_db: SyncDB, local_db: LocalDB,
     return candidates
 
 
-def adopt():
+def adopt(min_score: int = 5, dry_run: bool = False, assume_yes: bool = False):
     config = get_config()
     local_db = LocalDB()
     sync_db = SyncDB()
@@ -194,7 +195,8 @@ def adopt():
     print("\n   [2/3] Matching against SyncDB...")
     candidates = match_packages(sync_db, local_db,
                                 system_libs, system_bins,
-                                system_pcs, system_includes)
+                                system_pcs, system_includes,
+                                min_score=min_score)
 
     if not candidates:
         print("   ✓ No new packages to adopt. LocalDB is comprehensive.")
@@ -213,6 +215,12 @@ def adopt():
     print()
 
     # Phase 3: Register
+    if not assume_yes:
+        reply = input(f"   Continue with adopting {len(candidates)} packages? [y/N]: ").strip().lower()
+        if reply not in ("y", "yes"):
+            print("   Aborted. No changes were made.")
+            return
+
     print(f"   [3/3] Registering {len(candidates)} packages into LocalDB...")
 
     adopted = 0
@@ -228,14 +236,26 @@ def adopt():
                 provides=pkg.provides,
                 origin="explicit",
             )
-            local_db.register(local_pkg, files=[], explicit=True)
+            if not dry_run:
+                local_db.register(local_pkg, files=[], explicit=True)
             adopted += 1
         except Exception as e:
             print(f"      ⚠ Failed to adopt {pkg.name}: {e}")
 
     print(f"\n   ✓ Adoption complete. Registered {adopted} packages.")
+    if dry_run:
+        print("   ✓ Dry-run mode: LocalDB was not modified.")
     print(f"   ✓ Sven now recognizes your full BLFS system.")
 
 
+def main():
+    parser = argparse.ArgumentParser(description="Auto-discover BLFS packages and adopt into Sven LocalDB")
+    parser.add_argument("--min-score", type=int, default=5, help="Minimum confidence score to adopt (default: 5)")
+    parser.add_argument("--dry-run", action="store_true", help="Preview adoption without writing LocalDB")
+    parser.add_argument("-y", "--yes", action="store_true", help="Do not prompt for confirmation")
+    args = parser.parse_args()
+    adopt(min_score=args.min_score, dry_run=args.dry_run, assume_yes=args.yes)
+
+
 if __name__ == "__main__":
-    adopt()
+    main()

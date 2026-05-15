@@ -107,6 +107,13 @@ class TestSystemdFilter(unittest.TestCase):
         result = check_systemd_deps(pkg, "systemd")
         self.assertTrue(result.safe)
 
+    def test_systemd_variant_string_is_fine(self):
+        """Common systemd variant strings should also pass."""
+        from sven.resolver.systemd_filter import check_systemd_deps
+        pkg = Package(name="polkit", version="124", deps=["systemd-libs"])
+        result = check_systemd_deps(pkg, "systemd-linux")
+        self.assertTrue(result.safe)
+
     def test_filter_raises_strict(self):
         """In strict mode, hard deps should raise SystemdDependencyError."""
         from sven.resolver.systemd_filter import filter_systemd_packages

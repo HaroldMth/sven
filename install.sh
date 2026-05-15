@@ -9,21 +9,32 @@ set -e
 
 VERBOSE=0
 NO_SYNC=0
+SVEN_VERSION="latest"
+SKIP_ADOPT=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -v|--verbose) VERBOSE=1; shift ;;
     --no-sync|--quick) NO_SYNC=1; shift ;;
+    --skip-adopt) SKIP_ADOPT=1; shift ;;
+    --sven-version)
+      [ -n "${2:-}" ] || { echo "--sven-version requires a value" >&2; exit 1; }
+      SVEN_VERSION="$2"
+      shift 2
+      ;;
     -h|--help)
       cat <<'EOF'
 Usage: sudo bash install.sh [options]
 
   -v, --verbose        Trace every command, environment summary, and timings
   --no-sync, --quick   Skip the final "sven sync" (faster; run sync when you want)
+  --skip-adopt         Skip LFS/BLFS adoption scripts
+  --sven-version VER   Install a specific Sven release (example: 1.2.0)
   -h, --help           Show this help
 
 Examples:
   sudo bash install.sh
   sudo bash install.sh --quick
+  sudo bash install.sh --sven-version 1.2.0
   sudo bash install.sh -v
 EOF
       exit 0
@@ -150,8 +161,13 @@ if [ -f "$REPO_ROOT/dist/sven" ]; then
 elif [ -f "$REPO_ROOT/sven" ]; then
   vtime cp "${CP_FLAGS[@]}" "$REPO_ROOT/sven" /usr/bin/sven
 else
-  info "No local binary in dist/ — downloading latest release…"
-  LATEST_URL="https://github.com/haroldmth/sven/releases/latest/download/sven-linux-x86_64"
+  if [ "$SVEN_VERSION" = "latest" ]; then
+    info "No local binary in dist/ — downloading latest release…"
+    LATEST_URL="https://github.com/haroldmth/sven/releases/latest/download/sven-linux-x86_64"
+  else
+    info "No local binary in dist/ — downloading Sven v$SVEN_VERSION…"
+    LATEST_URL="https://github.com/haroldmth/sven/releases/download/v${SVEN_VERSION}/sven-linux-x86_64"
+  fi
   if command -v wget &>/dev/null; then
     vtime wget -q --show-progress "$LATEST_URL" -O /usr/bin/sven
   elif command -v curl &>/dev/null; then
@@ -165,12 +181,16 @@ chmod +x /usr/bin/sven
 ok "Installed → /usr/bin/sven"
 
 step 4 "Seven OS adoption (optional)"
-if [ -f "$ADOPT_DIR/adopt_lfs.py" ]; then
+if [ "$SKIP_ADOPT" -eq 1 ]; then
+  info "Skipping adoption scripts (--skip-adopt)."
+elif [ -f "$ADOPT_DIR/adopt_lfs.py" ]; then
   if [ "$VERBOSE" -eq 1 ]; then
     info "PYTHONPATH=$REPO_ROOT python3 $ADOPT_DIR/adopt_lfs.py"
   fi
   vtime env PYTHONPATH="$REPO_ROOT" python3 "$ADOPT_DIR/adopt_lfs.py"
-  vtime env PYTHONPATH="$REPO_ROOT" python3 "$ADOPT_DIR/adopt_blfs.py"
+  if [ -f "$ADOPT_DIR/adopt_blfs.py" ]; then
+    vtime env PYTHONPATH="$REPO_ROOT" python3 "$ADOPT_DIR/adopt_blfs.py" -y
+  fi
   ok "Adoption scripts finished."
 else
   warn "No adopt_lfs.py under $ADOPT_DIR — skipped."

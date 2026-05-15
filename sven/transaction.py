@@ -258,7 +258,11 @@ class InstallTransaction(Transaction):
         if not install_order:
             return []
 
-        filtered_pkgs, _ = filter_systemd_packages(install_order, "sysvinit", strict=False)
+        filtered_pkgs, _ = filter_systemd_packages(
+            install_order,
+            self.config.init_system,
+            strict=False,
+        )
         return filtered_pkgs
 
     def execute_resolved(
@@ -341,7 +345,11 @@ class InstallTransaction(Transaction):
                 print("Target is already up to date.")
                 return
 
-            filtered_pkgs, _ = filter_systemd_packages(install_order, "sysvinit", strict=False)
+            filtered_pkgs, _ = filter_systemd_packages(
+                install_order,
+                self.config.init_system,
+                strict=False,
+            )
             install_order_names = [p.name for p in filtered_pkgs]
 
             if not filtered_pkgs:

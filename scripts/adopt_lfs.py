@@ -3,9 +3,9 @@
 #  HANS TECH © 2024 — GPL v3
 #  scripts/adopt_lfs.py — registers LFS base into LocalDB
 # ============================================================
-import sys
+import argparse
 import os
-from pathlib import Path
+import sys
 
 # Add project to path
 sys.path.append(os.getcwd())
@@ -15,7 +15,7 @@ from sven.db.local_db import LocalDB
 from sven.db.models import Package
 
 
-def adopt():
+def adopt(dry_run: bool = False):
     config = get_config()
     db = LocalDB()
     
@@ -24,7 +24,14 @@ def adopt():
     
     print(f"   :: Adopting {len(protected)} core LFS packages...")
     
+    adopted = 0
+    skipped = 0
     for pkg_name in protected:
+        if db.has(pkg_name):
+            print(f"      = Skipping {pkg_name} (already registered)")
+            skipped += 1
+            continue
+
         print(f"      + Adopting {pkg_name} as LFS-BASE...")
 
         
@@ -44,21 +51,30 @@ def adopt():
         elif pkg_name == "curl":
             provides = ["libcurl.so"]
             
-        db.register(
-            Package(
-                name=pkg_name,
-                version="LFS-BASE",
-                desc="Core LFS system package (managed by original build)",
-                url="https://www.linuxfromscratch.org",
-                provides=provides,
-                origin="explicit"
-            ),
-            files=[],
-            explicit=True
-        )
+        if not dry_run:
+            db.register(
+                Package(
+                    name=pkg_name,
+                    version="LFS-BASE",
+                    desc="Core LFS system package (managed by original build)",
+                    url="https://www.linuxfromscratch.org",
+                    provides=provides,
+                    origin="explicit"
+                ),
+                files=[],
+                explicit=True
+            )
+        adopted += 1
 
+    print(f"\n   ✓ Adoption complete. Added: {adopted}, skipped: {skipped}.")
+    if dry_run:
+        print("   ✓ Dry-run mode: LocalDB was not modified.")
 
-    print("\n   ✓ Adoption complete. Sven now recognizes the base system.")
+def main():
+    parser = argparse.ArgumentParser(description="Adopt core LFS packages into Sven LocalDB")
+    parser.add_argument("--dry-run", action="store_true", help="Preview what would be adopted")
+    args = parser.parse_args()
+    adopt(dry_run=args.dry_run)
 
 if __name__ == "__main__":
-    adopt()
+    main()

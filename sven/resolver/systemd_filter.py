@@ -20,6 +20,7 @@ from ..exceptions import SystemdDependencyError
 # HARD deps: the package links against systemd or requires it to function
 SYSTEMD_HARD_DEPS = frozenset({
     "systemd",
+    "systemd-libs",
     "systemd-sysvcompat",
     "systemd-resolvconf",
     "systemd-ukify",
@@ -66,8 +67,12 @@ def check_systemd_deps(pkg: Package, init_system: str = "sysvinit") -> SystemdCh
     Returns:
         SystemdCheckResult with classification
     """
+    # Normalize init_system input so variants like "SystemD", "systemd-linux",
+    # or "systemd os" are treated as systemd-capable environments.
+    normalized_init = (init_system or "").strip().lower()
+
     # If we're on systemd, everything is fine
-    if init_system == "systemd":
+    if normalized_init == "systemd" or normalized_init.startswith("systemd-") or normalized_init.startswith("systemd "):
         return SystemdCheckResult(
             safe=True, hard_deps=[], soft_deps=[],
             alternatives={}, source_build_advised=False,
@@ -104,8 +109,10 @@ def check_systemd_deps(pkg: Package, init_system: str = "sysvinit") -> SystemdCh
             if alt:
                 alternatives[dep_name] = alt
 
-    safe = len(hard_deps) == 0 or (len(hard_deps) > 0 and len(alternatives) == len(hard_deps))
-    source_advised = not safe and len(alternatives) < len(hard_deps)
+    # Hard systemd deps are not safe on non-systemd init systems.
+    # Alternatives are advisory (possible manual replacement), not automatic compatibility.
+    safe = len(hard_deps) == 0
+    source_advised = len(hard_deps) > 0 and len(alternatives) < len(hard_deps)
 
     return SystemdCheckResult(
         safe=safe,

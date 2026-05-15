@@ -139,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     # ── check-version ──────────────────────────────────────────
     p_check = subparsers.add_parser("check-version", help="Check available versions of a package")
     p_check.add_argument("package", metavar="PKG")
+    subparsers.add_parser("version", help="Show Sven, runtime, and tool versions")
 
     # ── doctor ─────────────────────────────────────────────────
 
@@ -293,6 +294,9 @@ def main():
     elif cmd == "check-version":
         from .commands.check_version import run
         run(args.package)
+    elif cmd == "version":
+        from .commands.version import run
+        run()
     elif cmd == "doctor":
         from .commands.doctor import run as doctor_run
         doctor_run(offline=getattr(args, "offline", False))
