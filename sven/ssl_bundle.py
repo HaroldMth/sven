@@ -68,6 +68,20 @@ def _parse_openssl_dir(stdout: str) -> Optional[Path]:
     return None
 
 
+def _clean_subprocess_env(env: dict) -> dict:
+    """
+    When running via PyInstaller, it sets LD_LIBRARY_PATH to its temporary
+    directory containing bundled libraries (like libssl.so.3). This breaks
+    system binaries like git or curl that depend on the system's libraries.
+    We restore or remove LD_LIBRARY_PATH here.
+    """
+    if "LD_LIBRARY_PATH_ORIG" in env:
+        env["LD_LIBRARY_PATH"] = env.pop("LD_LIBRARY_PATH_ORIG")
+    else:
+        env.pop("LD_LIBRARY_PATH", None)
+    return env
+
+
 def _openssl_ca_paths() -> Tuple[Optional[str], Optional[str]]:
     """
     Ask OpenSSL where it was built to look for certs (matches linked git often).
@@ -86,6 +100,7 @@ def _openssl_ca_paths() -> Tuple[Optional[str], Optional[str]]:
             capture_output=True,
             text=True,
             timeout=8,
+            env=_clean_subprocess_env(os.environ.copy()),
         )
         if r.returncode == 0:
             od = _parse_openssl_dir(r.stdout)
@@ -207,6 +222,8 @@ def git_subprocess_environ() -> dict:
     Does not override GIT_SSL_CAINFO if already set.
     """
     env = os.environ.copy()
+    env = _clean_subprocess_env(env)
+    
     if env.get("GIT_SSL_CAINFO"):
         return env
     bundle = find_ca_bundle()
@@ -232,6 +249,7 @@ def ssl_failure_hint() -> str:
 
 def augment_env_with_ssl_certs(env: dict) -> dict:
     """For curl/wget/makepkg: set SSL_CERT_FILE and/or SSL_CERT_DIR."""
+    env = _clean_subprocess_env(env)
     bundle = find_ca_bundle()
     cap = find_ca_capath()
     if bundle:
