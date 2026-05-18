@@ -84,7 +84,7 @@ class PKGBUILDFetcher:
 
         try:
             result = subprocess.run(
-                ["git", *git_ssl_config_args(), "clone", "--depth=1", url, str(dest)],
+                ["git", *git_ssl_config_args(), "-c", "safe.directory=*", "clone", "--depth=1", url, str(dest)],
                 capture_output=True,
                 text=True,
                 timeout=300,
@@ -123,7 +123,7 @@ class PKGBUILDFetcher:
         print(f"   Updating {pkg_name}...")
         try:
             result = subprocess.run(
-                ["git", *git_ssl_config_args(), "-C", str(dest), "pull", "--ff-only"],
+                ["git", *git_ssl_config_args(), "-c", "safe.directory=*", "-C", str(dest), "pull", "--ff-only"],
                 capture_output=True,
                 text=True,
                 timeout=300,

@@ -81,6 +81,15 @@ def run_makepkg(
     if not pkgbuild.exists():
         raise BuildError(pkg_name, f"No PKGBUILD found in {pkg_dir}")
 
+    # ── Validate makepkg exists ──
+    import shutil
+    if not shutil.which("makepkg"):
+        raise BuildError(
+            pkg_name,
+            "makepkg command not found. You must install pacman and base-devel "
+            "(e.g. `sven install pacman fakeroot binutils make gcc`) before building AUR packages."
+        )
+
     # ── Security scan ──
     if not skip_security_scan:
         scan_result = scan_pkgbuild_dir(pkg_dir)
