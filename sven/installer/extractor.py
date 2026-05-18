@@ -95,6 +95,14 @@ class Extractor:
                             if member.isreg():
                                 if self.verbose:
                                     print(f"     [DEBUG] Extracting: {member.name}")
+                                
+                                # CRITICAL: Unlink existing file before writing to prevent 
+                                # "Text file busy" errors and segfaults from truncated shared libraries (e.g. glibc/gcc)
+                                try:
+                                    dest.unlink(missing_ok=True)
+                                except OSError:
+                                    pass
+
                                 with tar.extractfile(member) as source, open(dest, "wb") as target:
                                     target.write(source.read())
                                 
