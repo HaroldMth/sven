@@ -65,8 +65,24 @@ def run():
         with os.fdopen(fd, 'wb') as f:
             chunk_resp = requests.get(download_url, stream=True, timeout=30)
             chunk_resp.raise_for_status()
-            for chunk in chunk_resp.iter_content(chunk_size=8192):
-                if chunk: f.write(chunk)
+            
+            total_size = int(chunk_resp.headers.get('content-length', 0))
+            downloaded = 0
+            
+            print("   ", end="") # indentation
+            for chunk in chunk_resp.iter_content(chunk_size=1024 * 1024):
+                if chunk: 
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size:
+                        pct = int((downloaded / total_size) * 100)
+                        mb_done = downloaded / (1024*1024)
+                        mb_tot = total_size / (1024*1024)
+                        print(f"\r   \033[94mDownloading:\033[0m {pct:3d}%  [{mb_done:.1f} MB / {mb_tot:.1f} MB]", end="", flush=True)
+                    else:
+                        mb_done = downloaded / (1024*1024)
+                        print(f"\r   \033[94mDownloading:\033[0m {mb_done:.1f} MB downloaded...", end="", flush=True)
+            print()
                 
     except Exception as e:
         print_error(f"Download failed: {e}")
