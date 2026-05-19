@@ -20,11 +20,6 @@ from ..security.hook_scanner import scan_file, prompt_hook_approval
 # Standard Arch auto-hooks that we manually execute
 AUTO_HOOKS = [
     ["ldconfig"],
-    ["update-desktop-database", "-q"],
-    ["update-mime-database", "/usr/share/mime"],
-    ["gtk-update-icon-cache", "-q", "-t", "-f", "/usr/share/icons/hicolor"],
-    ["fc-cache", "-s"],
-    ["glib-compile-schemas", "/usr/share/glib-2.0/schemas"],
 ]
 
 def run_auto_hooks(install_root: str = None):
