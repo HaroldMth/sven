@@ -17,7 +17,7 @@ run:
 
 # ── Build binary via PyInstaller ─────────────────────────────
 build:
-	gcc -shared -o sven/libsven_core.so -fPIC libsven/vercmp.c
+	gcc -shared -o sven/libsven_core.so -fPIC libsven/vercmp.c libsven/hooks.c
 	python3 -m PyInstaller sven.spec
 	@echo ""
 	@echo "Binary ready: dist/sven"

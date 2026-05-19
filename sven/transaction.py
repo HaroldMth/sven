@@ -485,6 +485,8 @@ class InstallTransaction(Transaction):
             print_info(f"Extracting {len(filtered_pkgs)} package(s)...")
         ext = Extractor(verbose=self.verbose)
         
+        all_extracted_files = []
+        
         for i, pkg in enumerate(filtered_pkgs, 1):
             pkg_name = pkg.name
             if pkg_name not in merged_paths:
@@ -501,6 +503,7 @@ class InstallTransaction(Transaction):
 
             # Extract!
             files_extracted = ext.extract(archive)
+            all_extracted_files.extend(files_extracted)
             
             if self.verbose:
                 print(f"   ✓ Extracted {len(files_extracted)} files")
@@ -515,8 +518,6 @@ class InstallTransaction(Transaction):
             if self.verbose:
                 print(f"   ✓ Registered {pkg.name} in database")
 
-
-
             # Post hooks
             hr.run_phase("post_install", pkg.version)
 
@@ -526,6 +527,12 @@ class InstallTransaction(Transaction):
         if self.verbose:
             print_step("Updating caches, databases, and other system-wide post-install tasks.")
             print_info("Running system-wide post-install hooks...")
+            
+        # Run Arch ALPM Hooks
+        from .installer.alpm_hooks import ALPMHookEngine
+        hook_engine = ALPMHookEngine()
+        hook_engine.evaluate_and_run(all_extracted_files)
+        
         run_auto_hooks()
         if self.verbose:
             print_success("All system hooks completed successfully")

@@ -13,6 +13,10 @@ try:
     # int sven_vercmp(const char *a, const char *b)
     _libsven.sven_vercmp.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
     _libsven.sven_vercmp.restype = ctypes.c_int
+    
+    # int sven_match_path(const char *pattern, const char **files, int num_files)
+    _libsven.sven_match_path.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_char_p), ctypes.c_int]
+    _libsven.sven_match_path.restype = ctypes.c_int
 except OSError:
     _libsven = None
 
@@ -41,3 +45,27 @@ def vercmp(a: str, b: str) -> int:
     if len(parts_a) < len(parts_b): return -1
     if len(parts_a) > len(parts_b): return 1
     return 0
+
+
+def match_path(pattern: str, files: list[str]) -> bool:
+    """
+    Check if any file in 'files' matches 'pattern' using the fast C engine.
+    """
+    if not files:
+        return False
+        
+    if _libsven:
+        # Convert list of python strings to ctypes array of char pointers
+        c_pattern = pattern.encode('utf-8')
+        c_files_array = (ctypes.c_char_p * len(files))()
+        c_files_array[:] = [f.encode('utf-8') for f in files]
+        
+        return bool(_libsven.sven_match_path(c_pattern, c_files_array, len(files)))
+        
+    # Fallback to python fnmatch
+    import fnmatch
+    for f in files:
+        file_path = f.lstrip('/')
+        if fnmatch.fnmatch(file_path, pattern):
+            return True
+    return False
