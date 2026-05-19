@@ -235,7 +235,15 @@ class InstallTransaction(Transaction):
 
         installed = self.local_db.list_installed()
         if not force_reinstall:
-            install_order = [p for p in install_order if p.name not in installed]
+            final_order = []
+            for p in install_order:
+                if p.name not in installed:
+                    final_order.append(p)
+                else:
+                    local_pkg = self.local_db.get(p.name)
+                    if local_pkg and local_pkg.version != p.version:
+                        final_order.append(p)
+            install_order = final_order
 
         if not install_order:
             return []
@@ -301,7 +309,15 @@ class InstallTransaction(Transaction):
             install_order = sort_dependencies(graph.nodes, graph.edges)
 
             if not force_reinstall:
-                install_order = [p for p in install_order if p.name not in installed]
+                final_order = []
+                for p in install_order:
+                    if p.name not in installed:
+                        final_order.append(p)
+                    else:
+                        local_pkg = self.local_db.get(p.name)
+                        if local_pkg and local_pkg.version != p.version:
+                            final_order.append(p)
+                install_order = final_order
 
             if not install_order:
                 print("Target is already up to date.")
