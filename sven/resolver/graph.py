@@ -99,13 +99,12 @@ class DependencyGraph:
 
         # 1. Check LocalDB (already installed)
         installed = self.local_db.get(name)
-        if installed:
-            # If installed, we might still need to check constraints
+        # If it's installed AND it is just a dependency (required_by is not None),
+        # we skip adding it to the graph. If it's a top-level target (required_by is None),
+        # we must add it so InstallTransaction can evaluate if it needs an upgrade.
+        if installed and required_by is not None:
             if op and req_ver:
                 self._check_version(installed, op, req_ver)
-            # We don't add already installed packages as nodes to be installed,
-            # UNLESS they are explicitly requested or need upgrading (handled elsewhere).
-            # For this Phase 2, we skip installed packages in the DAG.
             return
 
         pkg = resolved_pkg or self._resolve_package(name, op, req_ver, required_by)
