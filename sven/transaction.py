@@ -609,13 +609,13 @@ class UpgradeTransaction(InstallTransaction):
     """
     Upgrades installed system.
     """
-    def execute(
+    def resolve(
         self,
-        packages: list[str] = None,
+        targets: list[str] = None,
         force_protected: bool = False,
-        _use_resolved: bool = False,
         force_reinstall: bool = False,
-    ) -> bool:
+        version: str = None,
+    ) -> list:
         print("\n   [Upgrade] Synchronizing local catalog with mirrors...")
         
         installed = self.local_db.list_installed()
@@ -623,7 +623,7 @@ class UpgradeTransaction(InstallTransaction):
         aur_check_list = []
         
         for pkg_name in installed:
-            if packages and pkg_name not in packages:
+            if targets and pkg_name not in targets:
                 continue
                 
             local_pkg = self.local_db.get(pkg_name)
@@ -647,16 +647,12 @@ class UpgradeTransaction(InstallTransaction):
                     to_upgrade.append(remote_pkg.name)
                 
         if not to_upgrade:
-            print("   Everything is up to date.")
-            return True
-
-        print(f"   => Found {len(to_upgrade)} upgrades: {' '.join(to_upgrade)}")
+            return []
         
-        # Fire off an InstallTransaction on the diff. This correctly triggers the lock
-        # and creates a snapshot ONLY of the packages that are going to be upgraded!
-        return super().execute(
+        # Hand off the diff to InstallTransaction.resolve to build the dependency graph!
+        return super().resolve(
             to_upgrade,
             force_protected=force_protected,
-            _use_resolved=_use_resolved,
             force_reinstall=force_reinstall,
+            version=version,
         )
