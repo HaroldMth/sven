@@ -224,16 +224,6 @@ class InstallTransaction(Transaction):
         if not targets:
             return []
 
-        protected_list = self.config.protected_packages
-        if force_protected:
-            detected_targets = [t for t in targets if t in protected_list]
-            if detected_targets:
-                self._handle_scary_prompt(detected_targets)
-        else:
-            for t in targets:
-                if t in protected_list:
-                    raise ProtectedPackageError(t)
-
         graph = DependencyGraph(self.sync_db, self.aur_db, self.local_db)
         for target in targets:
             if version:
@@ -242,15 +232,6 @@ class InstallTransaction(Transaction):
                 graph.add_package(target)
 
         install_order = sort_dependencies(graph.nodes, graph.edges)
-
-        if not force_protected:
-            for pkg in install_order:
-                if pkg.name in protected_list:
-                    raise ProtectedPackageError(pkg.name)
-        else:
-            detected_deps = [p.name for p in install_order if p.name in protected_list and p.name not in targets]
-            if detected_deps:
-                self._handle_scary_prompt(detected_deps)
 
         installed = self.local_db.list_installed()
         if not force_reinstall:
@@ -310,17 +291,6 @@ class InstallTransaction(Transaction):
                 print("Nothing to install.")
                 return
 
-            # 1. IMMEDIATE protection check
-            protected_list = self.config.protected_packages
-            if force_protected:
-                detected_targets = [t for t in targets if t in protected_list]
-                if detected_targets:
-                    self._handle_scary_prompt(detected_targets)
-            else:
-                for t in targets:
-                    if t in protected_list:
-                        raise ProtectedPackageError(t)
-
             print()
             print_section("Install · 1/6 · Resolving dependencies")
             graph = DependencyGraph(self.sync_db, self.aur_db, self.local_db)
@@ -329,15 +299,6 @@ class InstallTransaction(Transaction):
                 graph.add_package(target)
             
             install_order = sort_dependencies(graph.nodes, graph.edges)
-
-            if not force_protected:
-                for pkg in install_order:
-                    if pkg.name in protected_list:
-                        raise ProtectedPackageError(pkg.name)
-            else:
-                detected_deps = [p.name for p in install_order if p.name in protected_list and p.name not in targets]
-                if detected_deps:
-                    self._handle_scary_prompt(detected_deps)
 
             if not force_reinstall:
                 install_order = [p for p in install_order if p.name not in installed]
