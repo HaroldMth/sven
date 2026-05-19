@@ -19,11 +19,38 @@ def run(packages: list[str] = None, force_protected: bool = False, verbose: bool
         print_success("Everything is up to date.")
         return
         
+    # Organize into categories
+    to_build = [p for p in resolved if p.origin == "aur"]
+    
+    from ..constants import CACHE_PKGS
+    from pathlib import Path
+    cache_path = Path(CACHE_PKGS)
+    
+    cached_pkgs = []
+    download_pkgs = []
+    for p in resolved:
+        if p.origin == "aur":
+            continue
+        p_path = cache_path / p.filename
+        if p_path.exists() and p_path.stat().st_size > 0:
+            cached_pkgs.append(p)
+        else:
+            download_pkgs.append(p)
+            
+    total_dl_bytes = sum(p.size for p in download_pkgs)
+    total_dl_mib = total_dl_bytes / 1024 / 1024
+    
+    print()
+    print(f"   \033[1mTransaction Summary\033[0m")
+    print(f"   ├─ Re-using Cached   : {len(cached_pkgs)} packages")
+    print(f"   ├─ To Download       : {len(download_pkgs)} ({total_dl_mib:.2f} MiB)")
+    print(f"   └─ To Build (AUR)    : {len(to_build)}")
+    print()
+
     # Calculate sizes
     total_dl = sum(p.size for p in resolved)
     total_inst = sum(p.isize for p in resolved)
 
-    print()
     show_package_list(resolved, total_dl, total_inst)
     print_info(
         f"Ready to upgrade {len(resolved)} package(s). "
