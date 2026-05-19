@@ -17,13 +17,10 @@ from ..exceptions import DependencyNotFoundError, VersionConstraintError
 class Version:
     """
     Simple Arch-compatible version comparison.
-    Handles pkgver-pkgrel format.
+    Handles pkgver-pkgrel format using blazing fast C extension.
     """
     def __init__(self, v_str: str):
         self.v_str = v_str
-        # Split into components for comparison
-        # This is a simplified version of alpm_pkg_vercmp
-        self.parts = re.split(r'[^a-zA-Z0-9]+', v_str)
 
     def __lt__(self, other: 'Version'):
         return self._compare(other) < 0
@@ -41,18 +38,8 @@ class Version:
         return self._compare(other) == 0
 
     def _compare(self, other: 'Version') -> int:
-        for p1, p2 in zip(self.parts, other.parts):
-            if p1.isdigit() and p2.isdigit():
-                n1, n2 = int(p1), int(p2)
-                if n1 < n2: return -1
-                if n1 > n2: return 1
-            else:
-                if p1 < p2: return -1
-                if p1 > p2: return 1
-        
-        if len(self.parts) < len(other.parts): return -1
-        if len(self.parts) > len(other.parts): return 1
-        return 0
+        from ..libsven import vercmp
+        return vercmp(self.v_str, other.v_str)
 
 
 def parse_dep(dep_str: str) -> tuple[str, Optional[str], Optional[str]]:

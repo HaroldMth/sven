@@ -4,6 +4,7 @@ block_cipher = None
 
 datas = [
     ('initscripts', 'initscripts'),
+    ('sven/libsven_core.so', 'sven'),
 ]
 
 import os
