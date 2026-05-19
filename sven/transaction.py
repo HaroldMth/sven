@@ -609,45 +609,54 @@ class UpgradeTransaction(InstallTransaction):
     """
     Upgrades installed system.
     """
-    def _get_snapshot_packages(self, packages: list[str]) -> list[str]:
-        # For full upgrade, snapshot EVERYTHING that is changing.
-        # But we must calculate the diff first. For simplicity, just return
-        # the local catalog so we backup configs.
-        if not packages:
-            return self.local_db.list_installed()
-        return packages
-        
-    def _execute_core(
+    def execute(
         self,
-        targets: list[str] = None,
+        packages: list[str] = None,
         force_protected: bool = False,
         _use_resolved: bool = False,
         force_reinstall: bool = False,
-    ):
+    ) -> bool:
         print("\n   [Upgrade] Synchronizing local catalog with mirrors...")
         
         installed = self.local_db.list_installed()
         to_upgrade = []
+        aur_check_list = []
         
         for pkg_name in installed:
-            if targets and pkg_name not in targets:
+            if packages and pkg_name not in packages:
                 continue
                 
             local_pkg = self.local_db.get(pkg_name)
+            if not local_pkg:
+                continue
+
             remote_pkg = self.sync_db.get(pkg_name)
             
-            if remote_pkg and local_pkg and remote_pkg.version != local_pkg.version:
-                to_upgrade.append(pkg_name)
+            if remote_pkg:
+                if remote_pkg.version != local_pkg.version:
+                    to_upgrade.append(pkg_name)
+            else:
+                aur_check_list.append(pkg_name)
+
+        if aur_check_list:
+            print("   [Upgrade] Checking AUR for updates...")
+            aur_pkgs = self.aur_db.info_multi(aur_check_list)
+            for remote_pkg in aur_pkgs:
+                local_pkg = self.local_db.get(remote_pkg.name)
+                if local_pkg and remote_pkg.version != local_pkg.version:
+                    to_upgrade.append(remote_pkg.name)
                 
         if not to_upgrade:
             print("   Everything is up to date.")
-            return
+            return True
 
         print(f"   => Found {len(to_upgrade)} upgrades: {' '.join(to_upgrade)}")
         
-        # Fire off an InstallTransaction on the diff
-        super()._execute_core(
+        # Fire off an InstallTransaction on the diff. This correctly triggers the lock
+        # and creates a snapshot ONLY of the packages that are going to be upgraded!
+        return super().execute(
             to_upgrade,
             force_protected=force_protected,
+            _use_resolved=_use_resolved,
             force_reinstall=force_reinstall,
         )
