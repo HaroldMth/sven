@@ -4,7 +4,6 @@
 #  resolver/graph.py — dependency graph builder
 # ============================================================
 
-import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Set, Dict, List
 from ..db.models import Package
@@ -12,45 +11,21 @@ from ..db.sync_db import SyncDB
 from ..db.aur_db import AURDB
 from ..db.local_db import LocalDB
 from ..exceptions import DependencyNotFoundError, VersionConstraintError
+from ..libsven import parse_dep, dep_satisfied, vercmp
 
 
 class Version:
     """
-    Simple Arch-compatible version comparison.
-    Handles pkgver-pkgrel format using blazing fast C extension.
+    Arch-compatible version comparison via C sven_vercmp.
     """
     def __init__(self, v_str: str):
         self.v_str = v_str
 
-    def __lt__(self, other: 'Version'):
-        return self._compare(other) < 0
-
-    def __le__(self, other: 'Version'):
-        return self._compare(other) <= 0
-
-    def __gt__(self, other: 'Version'):
-        return self._compare(other) > 0
-
-    def __ge__(self, other: 'Version'):
-        return self._compare(other) >= 0
-
-    def __eq__(self, other: 'Version'):
-        return self._compare(other) == 0
-
-    def _compare(self, other: 'Version') -> int:
-        from ..libsven import vercmp
-        return vercmp(self.v_str, other.v_str)
-
-
-def parse_dep(dep_str: str) -> tuple[str, Optional[str], Optional[str]]:
-    """
-    Parse a dependency string like "bash>=5.0"
-    Returns (name, operator, version)
-    """
-    match = re.match(r'^([^<>=]+)([<>=]+)(.+)$', dep_str)
-    if match:
-        return match.group(1), match.group(2), match.group(3)
-    return dep_str, None, None
+    def __lt__(self, other: 'Version'):  return vercmp(self.v_str, other.v_str) <  0
+    def __le__(self, other: 'Version'):  return vercmp(self.v_str, other.v_str) <= 0
+    def __gt__(self, other: 'Version'):  return vercmp(self.v_str, other.v_str) >  0
+    def __ge__(self, other: 'Version'):  return vercmp(self.v_str, other.v_str) >= 0
+    def __eq__(self, other: 'Version'):  return vercmp(self.v_str, other.v_str) == 0
 
 
 class DependencyGraph:
@@ -151,9 +126,11 @@ class DependencyGraph:
             self.optdeps[name] = pkg.optdeps
 
     def _check_version(self, pkg: Package, op: str, req_ver: str):
-        # Disabled for demonstration purposes since we don't have
-        # a fully Arch-compliant libalpm version parser.
-        pass
+        """Verify installed version satisfies constraint using C sven_dep_satisfied."""
+        if not op or not req_ver:
+            return
+        if not dep_satisfied(pkg.version, op, req_ver):
+            raise VersionConstraintError(pkg.name, pkg.version, op, req_ver)
 
     def _resolve_package(
         self,

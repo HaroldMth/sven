@@ -4,10 +4,9 @@
 #  resolver/sorter.py — topological sort for install order
 # ============================================================
 
-import graphlib
 from typing import List, Dict, Set
 from ..db.models import Package
-from ..exceptions import CircularDependencyError
+from ..libsven import topo_sort as _c_topo_sort
 
 
 def sort_dependencies(
@@ -15,42 +14,15 @@ def sort_dependencies(
     edges: Dict[str, Set[str]]
 ) -> List[Package]:
     """
-    Sort package installation order. 
-    Handles circular dependencies by breaking them and warning.
+    Sort package installation order using C DFS topo sort.
+    Handles circular dependencies by breaking cycles and warning.
     """
-    # Use a custom DFS to handle cycles gracefully
-    order = []
-    visited = set()
-    temp_stack = set()
-    cycles_found = []
+    names = list(nodes.keys())
+    sorted_names, cycle_names = _c_topo_sort(names, edges)
 
-    def visit(name: str):
-        if name in temp_stack:
-            # Cycle detected!
-            if name not in cycles_found:
-                cycles_found.append(name)
-            return
-        if name in visited:
-            return
-
-        temp_stack.add(name)
-        # Sort dependencies for deterministic order
-        for dep in sorted(edges.get(name, set())):
-            visit(dep)
-        
-        temp_stack.remove(name)
-        visited.add(name)
-        order.append(name)
-
-    # Process all nodes
-    for name in sorted(nodes.keys()):
-        visit(name)
-
-    if cycles_found:
+    if cycle_names:
         from ..ui.output import print_warning
-        pkgs_in_cycle = ", ".join(cycles_found)
-        print_warning(f"Circular dependency detected involving: {pkgs_in_cycle}")
+        print_warning(f"Circular dependency detected involving: {', '.join(cycle_names)}")
         print_warning("   Sven will attempt to break the cycle by installing implementation packages first.")
 
-    # Map names back to Package objects
-    return [nodes[name] for name in order if name in nodes]
+    return [nodes[name] for name in sorted_names if name in nodes]

@@ -14,44 +14,25 @@ from pathlib import Path
 
 from ..db.models import Package
 from ..exceptions import SystemdDependencyError
-
-
-# ── Known systemd packages and libraries ─────────────────────
-
-# HARD deps: the package links against systemd or requires it to function
-SYSTEMD_HARD_DEPS = frozenset({
-    "systemd",
-    "systemd-libs",
-    "systemd-sysvcompat",
-    "systemd-resolvconf",
-    "systemd-ukify",
-})
-
-# SOFT deps: the package ships .service files or optional integration
-# These are safe to install — the service files just won't be used
-SYSTEMD_SOFT_INDICATORS = frozenset({
-    "systemd-service",
-    "systemctl",
-})
-
-# Alternative packages that provide systemd-like functionality on non-systemd
-SYSTEMD_ALTERNATIVES = {
-    "systemd-libs":    "elogind",
-    "libsystemd":      "elogind",
-    "libsystemd.so":   "elogind",
-    "libsystemd.so=0-64": "elogind",
-    "libudev.so":      "eudev",
-    "systemd":         None,   # No drop-in alternative
-}
+from ..libsven import strip_constraint, classify_systemd_dep, dep_satisfied
 
 
 class SystemdCheckResult(NamedTuple):
-    """Result of checking a package for systemd dependencies."""
-    safe: bool                    # True if package is safe to install
-    hard_deps: list[str]          # systemd deps that will prevent function
-    soft_deps: list[str]          # systemd deps that are optional/ignorable
-    alternatives: dict[str, str]  # suggested alternative for each hard dep
-    source_build_advised: bool    # should we build from source instead?
+    safe: bool
+    hard_deps: list[str]
+    soft_deps: list[str]
+    alternatives: dict[str, str]
+    source_build_advised: bool
+
+
+SYSTEMD_ALTERNATIVES = {
+    "systemd-libs":       "elogind",
+    "libsystemd":         "elogind",
+    "libsystemd.so":      "elogind",
+    "libsystemd.so=0-64": "elogind",
+    "libudev.so":         "eudev",
+    "systemd":            None,
+}
 
 
 def check_systemd_deps(pkg: Package, init_system: str = "sysvinit") -> SystemdCheckResult:
@@ -84,33 +65,22 @@ def check_systemd_deps(pkg: Package, init_system: str = "sysvinit") -> SystemdCh
     all_deps = pkg.deps
     hard_deps = []
     soft_deps = []
-
     alternatives = {}
 
     for dep in all_deps:
-        # Strip version constraints
-        dep_name = dep.split(">=")[0].split("<=")[0].split(">")[0].split("<")[0].split("=")[0].strip()
+        dep_name = strip_constraint(dep)
 
-        if dep_name in SYSTEMD_HARD_DEPS:
-            # Special case: pacman declares "systemd" for sysusers hook but operates
-            # perfectly fine natively without it.
+        cls = classify_systemd_dep(dep_name)
+
+        if cls == 1:
             if pkg.name == "pacman" and dep_name == "systemd":
                 continue
-
             hard_deps.append(dep_name)
             alt = SYSTEMD_ALTERNATIVES.get(dep_name)
             if alt:
                 alternatives[dep_name] = alt
-
-        elif dep_name in SYSTEMD_SOFT_INDICATORS:
+        elif cls == 2:
             soft_deps.append(dep_name)
-
-        # Also check for .so references to systemd libraries
-        elif "libsystemd" in dep_name or "libudev" in dep_name:
-            hard_deps.append(dep_name)
-            alt = SYSTEMD_ALTERNATIVES.get(dep_name)
-            if alt:
-                alternatives[dep_name] = alt
 
     # Hard systemd deps are not safe on non-systemd init systems.
     # Alternatives are advisory (possible manual replacement), not automatic compatibility.

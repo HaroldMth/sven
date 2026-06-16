@@ -195,18 +195,14 @@ class LocalDB:
     def orphans(self) -> list[Package]:
         """
         Auto-installed packages that nothing explicitly installed depends on.
-        These are safe to remove.
         """
-        all_pkgs   = self.all_packages()
-        all_deps   = set()
+        from ..libsven import strip_constraint
+        all_pkgs = self.all_packages()
+        all_deps = set()
 
         for pkg in all_pkgs:
             for dep in pkg.deps:
-                # Strip version constraints
-                clean = dep.split(">=")[0].split("<=")[0] \
-                           .split(">")[0].split("<")[0] \
-                           .split("=")[0].strip()
-                all_deps.add(clean)
+                all_deps.add(strip_constraint(dep))
 
         return [
             p for p in self.auto_packages()
