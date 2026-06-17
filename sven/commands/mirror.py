@@ -6,16 +6,19 @@
 from ..downloader.mirror import MirrorManager
 from ..ui import print_banner, print_section, print_info
 
-def run(benchmark: bool = False):
+def run(benchmark: bool = False, rank: bool = False):
     print_banner()
     mgr = MirrorManager()
     
-    if benchmark:
+    if benchmark or rank:
         print_section("Benchmarking mirrors...")
         ordered = mgr.benchmark_all()
         for idx, ms in enumerate(ordered):
             speed = f"{ms['ping_ms']}ms" if ms['ping_ms'] != float('inf') else "offline"
             print(f"   [{idx+1}] {ms['url']} ({speed})")
+        if rank and ordered:
+            path = mgr.save_ranked_mirrorlist(ordered)
+            print_info(f"Saved ranked mirrors to {path}")
     else:
         print_section("Active Mirrors:")
         raw = mgr.mirrors

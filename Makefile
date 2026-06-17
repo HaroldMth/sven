@@ -22,11 +22,11 @@ HAVE_ARCHIVE := $(shell pkg-config --exists libarchive 2>/dev/null && echo 1 || 
 ifeq ($(HAVE_ARCHIVE),1)
   ALL_SRC     = $(CORE_SRC) libsven/extract.c
   ARCHIVE_FLAGS = $(shell pkg-config --cflags --libs libarchive)
-  ARCHIVE_NOTE  = "(with libarchive extractor)"
+  ARCHIVE_NOTE  = (with libarchive extractor)
 else
   ALL_SRC     = $(CORE_SRC)
   ARCHIVE_FLAGS =
-  ARCHIVE_NOTE  = "(without libarchive — Python extractor fallback active)"
+  ARCHIVE_NOTE  = (without libarchive — Python extractor fallback active)
   $(info [sven] libarchive-dev not found — extract.c excluded. Install libarchive-dev to enable C extractor.)
 endif
 

@@ -27,3 +27,9 @@ def test_build_parser_flags():
     assert args.no_color is True
     assert args.dry_run is True
     assert args.source is True
+
+def test_build_parser_mirror_rank_flag():
+    parser = build_parser()
+    args = parser.parse_args(["mirror", "--rank"])
+    assert args.command == "mirror"
+    assert args.rank is True

@@ -83,6 +83,13 @@ Version needs section '.gnu.version_r' contains 2 entries:
 
 class TestSystemdFilter(unittest.TestCase):
 
+    def setUp(self):
+        self.exists_patcher = patch("sven.resolver.systemd_filter.Path.exists", return_value=False)
+        self.mock_exists = self.exists_patcher.start()
+
+    def tearDown(self):
+        self.exists_patcher.stop()
+
     def test_safe_package(self):
         """Package with no systemd deps should pass."""
         from sven.resolver.systemd_filter import check_systemd_deps
