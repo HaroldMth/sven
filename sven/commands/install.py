@@ -138,41 +138,46 @@ def run(
 
 
 def _run_simulation():
-    """Exact CLI simulation execution for demonstration."""
+    """Exact CLI simulation execution for demonstration with premium animated widgets."""
     from ..constants import VERSION
+    from ..ui import Spinner, ProgressBar
 
     print("╔══════════════════════════════════════════════════╗")
     print(f"║   Sven v{VERSION}  ·  Seven OS  ·  by HANS TECH      ║")
     print("╚══════════════════════════════════════════════════╝")
     print("")
-    print("\033[96m::\033[0m Syncing databases...")
-    _slp(0.5)
-    print("   core.db          \033[92m[####################]\033[0m  1.1 MiB  ✓")
-    _slp(0.3)
-    print("   extra.db         \033[92m[####################]\033[0m  8.4 MiB  ✓")
-    _slp(0.2)
-    print("   multilib.db      \033[92m[####################]\033[0m  0.3 MiB  ✓")
-    print("")
 
-    _slp(0.5)
-    print("\033[96m::\033[0m Searching for packages...")
-    print("")
-    _slp(0.3)
-    print("   neovim           found  [extra]        ✓")
-    _slp(0.1)
-    print("   htop             found  [extra]        ✓")
-    _slp(0.1)
-    print("   firefox          found  [extra]        ✓")
-    _slp(0.3)
-    print("   spotify          not in official repos")
+    # ── Database Sync ──
+    spinner = Spinner("Syncing database: core.db")
+    spinner.start()
     _slp(0.6)
-    print("                    searching AUR...      found ✓")
+    spinner.stop(success=True, final_msg="Synced core.db (1.1 MiB)")
+
+    spinner = Spinner("Syncing database: extra.db")
+    spinner.start()
+    _slp(0.8)
+    spinner.stop(success=True, final_msg="Synced extra.db (8.4 MiB)")
+
+    spinner = Spinner("Syncing database: multilib.db")
+    spinner.start()
+    _slp(0.4)
+    spinner.stop(success=True, final_msg="Synced multilib.db (0.3 MiB)")
     print("")
 
-    _slp(0.5)
-    print("\033[96m::\033[0m Resolving full dependency tree...")
+    # ── Searching ──
+    spinner = Spinner("Searching for packages")
+    spinner.start()
+    _slp(0.7)
+    spinner.stop(success=True, final_msg="Found package targets: neovim, htop, firefox, spotify")
     print("")
+
+    # ── Resolving dependency tree ──
+    spinner = Spinner("Resolving full dependency tree")
+    spinner.start()
     _slp(0.8)
+    spinner.stop(success=True, final_msg="Dependency tree resolved:")
+    print("")
+
     print("   neovim    0.9.5-1      [extra]")
     print("    ├── libuv            1.48.0-1    [extra]")
     print("    ├── tree-sitter      0.22.2-1    [extra]")
@@ -180,12 +185,12 @@ def _run_simulation():
     print("    └── unibilium        2.1.1-1     [extra]")
     print("")
     print("   htop      3.3.0-1      [extra]")
-    print("    ├── libcap           2.70-1      [extra]  ✓ installed")
+    print("    ├── libcap           2.70-1      [extra]  ✔ installed")
     print("    └── libnl            3.9.0-1     [extra]")
     print("")
     print("   firefox   125.0-1      [extra]")
     print("    ├── gtk3             3.24.41-2   [extra]")
-    print("    │    ├── glib2       2.80.0-1    [extra]  ✓ installed")
+    print("    │    ├── glib2       2.80.0-1    [extra]  ✔ installed")
     print("    │    ├── cairo       1.18.0-2    [extra]")
     print("    │    └── pango       1.52.1-1    [extra]")
     print("    ├── nss              3.99-1      [extra]")
@@ -198,23 +203,23 @@ def _run_simulation():
     print("    └── libxss           1.2.3-4     [extra]")
     print("")
 
-    print("\033[96m::\033[0m Dependency tree resolved.")
-    print("")
     print("   Official packages  :  18")
     print("   AUR packages       :   1  (spotify)")
     print("   Already installed  :   2  (glib2, libcap)")
     print("   To install         :  17")
     print("")
 
-    _slp(0.5)
-    print("\033[96m::\033[0m Compatibility check...")
+    spinner = Spinner("Running compatibility check")
+    spinner.start()
+    _slp(0.6)
+    spinner.stop(success=True, final_msg="Compatibility check complete:")
     print("   neovim     → binary safe   ✅")
     print("   htop       → binary safe   ✅")
     print("   firefox    → binary safe   ✅")
     print("   spotify    → AUR build     🔨")
     print("")
 
-    print("\033[96m::\033[0m Packages to install:")
+    print("\033[1;38;5;99m▍\033[0;1m Packages to install:\033[0m")
     print("   libuv-1.48.0        tree-sitter-0.22.2")
     print("   libvterm-0.3.3      unibilium-2.1.1")
     print("   libnl-3.9.0         cairo-1.18.0")
@@ -230,7 +235,7 @@ def _run_simulation():
     print("   AUR builds required   :  1")
     print("")
 
-    reply = input("\033[96m::\033[0m Proceed? [Y/n] ")
+    reply = input("   \033[96m::\033[0m Proceed? [Y/n] ")
     if reply.lower() == 'n':
         sys.exit(0)
 
@@ -240,47 +245,60 @@ def _run_simulation():
     print("══════════════════════════════════════════════════")
     print("")
     
-    print("\033[96m::\033[0m Mirror → mirror.rackspace.com  (12ms ping) ✓")
+    spinner = Spinner("Connecting to mirrors")
+    spinner.start()
+    _slp(0.5)
+    spinner.stop(success=True, final_msg="Mirror selected: mirror.rackspace.com (12ms ping)")
     print("")
     
     dls = [
-        ("libuv-1.48.0-1", "1.2 MiB"), ("tree-sitter-0.22.2-1", "0.8 MiB"),
-        ("libvterm-0.3.3-1", "0.3 MiB"), ("unibilium-2.1.1-1", "0.1 MiB"),
-        ("libnl-3.9.0-1", "0.4 MiB"), ("cairo-1.18.0-2", "1.4 MiB"),
-        ("pango-1.52.1-1", "0.9 MiB"), ("gtk3-3.24.41-2", "9.1 MiB"),
-        ("nss-3.99-1", "3.4 MiB"), ("libevent-2.1.12-3", "0.6 MiB"),
-        ("libvpx-1.14.0-1", "1.1 MiB"), ("alsa-lib-1.2.11-1", "0.9 MiB"),
-        ("libcurl-gnutls-8.7.1-1", "0.4 MiB"), ("libxss-1.2.3-4", "0.1 MiB"),
-        ("neovim-0.9.5-1", "7.2 MiB"), ("htop-3.3.0-1", "0.4 MiB"),
-        ("firefox-125.0-1", "89.4 MiB")
+        ("libuv-1.48.0-1", 1.2), ("tree-sitter-0.22.2-1", 0.8),
+        ("libvterm-0.3.3-1", 0.3), ("unibilium-2.1.1-1", 0.1),
+        ("libnl-3.9.0-1", 0.4), ("cairo-1.18.0-2", 1.4),
+        ("pango-1.52.1-1", 0.9), ("gtk3-3.24.41-2", 9.1),
+        ("nss-3.99-1", 3.4), ("libevent-2.1.12-3", 0.6),
+        ("libvpx-1.14.0-1", 1.1), ("alsa-lib-1.2.11-1", 0.9),
+        ("libcurl-gnutls-8.7.1-1", 0.4), ("libxss-1.2.3-4", 0.1),
+        ("neovim-0.9.5-1", 7.2), ("htop-3.3.0-1", 0.4),
+        ("firefox-125.0-1", 89.4)
     ]
-    for i, (name, size) in enumerate(dls):
-        _slp(0.12)
-        idx = f"{i+1}/17".rjust(5)
-        print(f"   [{idx}]  {name:<22} [\033[92m####################\033[0m] {size:>9}")
+    for i, (name, size_mb) in enumerate(dls):
+        idx = f"{i+1}/17"
+        pb = ProgressBar(total=100, prefix=f"[{idx:>{5}}] {name:<22}", suffix=f"{size_mb} MiB")
+        for step in range(0, 101, 10):
+            pb.update(step)
+            _slp(0.012)
+        pb.finish()
     
     print("")
-    _slp(0.4)
-    print("\033[96m::\033[0m Verifying GPG signatures...      all passed ✓")
-    print("\033[96m::\033[0m Verifying SHA256 checksums...    all passed ✓")
-    print("\033[96m::\033[0m Packages cached → /var/cache/sven/pkgs/")
+    spinner = Spinner("Verifying GPG signatures")
+    spinner.start()
+    _slp(0.6)
+    spinner.stop(success=True, final_msg="GPG signatures verified successfully (all passed)")
+
+    spinner = Spinner("Verifying SHA256 checksums")
+    spinner.start()
+    _slp(0.5)
+    spinner.stop(success=True, final_msg="SHA256 checksums verified successfully (all passed)")
+    print("   → Packages cached to /var/cache/sven/pkgs/")
     print("")
 
     print("══════════════════════════════════════════════════")
     print("  PHASE 2  AUR Build — spotify")
     print("══════════════════════════════════════════════════")
     print("")
-    print("\033[96m::\033[0m Cloning PKGBUILD...")
-    print("   → git clone https://aur.archlinux.org/spotify.git")
-    _slp(0.5)
-    print("   done ✓")
+    
+    spinner = Spinner("Cloning PKGBUILD: spotify")
+    spinner.start()
+    _slp(0.6)
+    spinner.stop(success=True, final_msg="Cloned PKGBUILD successfully from AUR")
     print("")
-    print("\033[93m⚠  AUR packages are user-submitted.")
-    print("   Not verified by Sven or HANS TECH.")
-    print("   Review PKGBUILD before building.\033[0m")
+    print("   \033[1;33m⚠  AUR packages are user-submitted.\033[0m")
+    print("      Not verified by Sven or HANS TECH.")
+    print("      Please review PKGBUILD before building.")
     print("")
     
-    reply = input("\033[96m::\033[0m View PKGBUILD? [y/N] ")
+    reply = input("   \033[96m::\033[0m View PKGBUILD? [y/N] ")
     if reply.lower() == 'y':
         print("")
         print("── PKGBUILD ──────────────────────────────────────")
@@ -293,37 +311,51 @@ def _run_simulation():
         print("──────────────────────────────────────────────────")
         print("")
         
-    reply = input("\033[96m::\033[0m Looks clean. Continue build? [Y/n] ")
+    reply = input("   \033[96m::\033[0m Looks clean. Continue build? [Y/n] ")
     if reply.lower() == 'n': sys.exit(0)
 
     print("")
-    print("\033[96m::\033[0m Fetching sources...")
+    pb = ProgressBar(total=100, prefix="   Fetching sources: spotify-1.2.25.deb", suffix="108.4 MiB")
+    for step in range(0, 101, 5):
+        pb.update(step)
+        _slp(0.015)
+    pb.finish()
+    
+    spinner = Spinner("Running makepkg: extracting sources")
+    spinner.start()
+    _slp(0.6)
+    spinner.stop(success=True)
+
+    spinner = Spinner("Running makepkg: packaging as .pkg.tar.zst")
+    spinner.start()
     _slp(0.8)
-    print("   spotify-1.2.25.deb    [\033[92m####################\033[0m]  108.4 MiB")
-    print("\033[96m::\033[0m Verifying checksums...              passed ✓")
-    print("\033[96m::\033[0m Running makepkg...")
-    _slp(0.5)
-    print("   → extracting .deb                   done")
-    _slp(0.5)
-    print("   → repackaging as .pkg.tar.zst       done")
-    print("\033[96m::\033[0m Build complete ✓")
+    spinner.stop(success=True, final_msg="Build complete: spotify-1.2.25-1-x86_64.pkg.tar.zst")
     print("")
 
     print("══════════════════════════════════════════════════")
     print("  PHASE 3  Pre-install")
     print("══════════════════════════════════════════════════")
     print("")
-    print("\033[96m::\033[0m Creating rollback snapshot...")
-    _slp(0.6)
-    print("   → snapshot-2024-03-30T21:14:42      done ✓")
-    print("\033[96m::\033[0m Checking file conflicts...          none ✓")
-    print("\033[96m::\033[0m Checking .so dependencies...        all satisfied ✓")
+    
+    spinner = Spinner("Creating rollback snapshot")
+    spinner.start()
+    _slp(0.7)
+    spinner.stop(success=True, final_msg="Rollback snapshot created: snapshot-2024-03-30T21:14:42")
+
+    spinner = Spinner("Checking file conflicts")
+    spinner.start()
+    _slp(0.5)
+    spinner.stop(success=True, final_msg="Checking file conflicts...          none ✔")
+
+    spinner = Spinner("Checking library ABI compatibility")
+    spinner.start()
+    _slp(0.4)
+    spinner.stop(success=True, final_msg="Checking .so dependencies...        all satisfied ✔")
     print("")
 
     print("══════════════════════════════════════════════════")
     print("  PHASE 4  Installing")
     print("══════════════════════════════════════════════════")
-    print("")
     
     installs = [
         "libuv-1.48.0-1", "tree-sitter-0.22.2-1", "libvterm-0.3.3-1",
@@ -335,24 +367,27 @@ def _run_simulation():
     ]
     
     for i, pkg in enumerate(installs):
-        idx = f"{i+1}/18".rjust(5)
-        print(f"   [{idx}]  {pkg}")
-        _slp(0.15)
-        print("            → extracting...            done")
+        idx = f"{i+1}/18"
+        spinner = Spinner(f"[{idx:>{5}}] Installing {pkg}")
+        spinner.start()
+        _slp(0.12)
         
         if pkg.startswith("gtk3"):
-            print("            → post-install: updating icon cache    done")
+            spinner.message = f"[{idx:>{5}}] Installing {pkg} (updating icon cache)"
+            _slp(0.08)
         elif pkg.startswith("neovim"):
-            print("            → post-install: updating helptags      done")
+            spinner.message = f"[{idx:>{5}}] Installing {pkg} (updating helptags)"
+            _slp(0.08)
         elif pkg.startswith("firefox"):
-            print("            → writing desktop entry    done")
-            print("            → systemctl: registering   done ✓")
+            spinner.message = f"[{idx:>{5}}] Installing {pkg} (registering desktop & systemd)"
+            _slp(0.12)
         elif pkg.startswith("spotify"):
-            print("            → writing desktop entry    done")
+            spinner.message = f"[{idx:>{5}}] Installing {pkg} (writing desktop entry)"
+            _slp(0.08)
+            
+        spinner.stop(success=True, final_msg=f"[{idx:>{5}}] Installed {pkg}")
 
-        print("            → registering...           done")
-        print("")
-
+    print("")
     print("══════════════════════════════════════════════════")
     print("  PHASE 5  Finalizing")
     print("══════════════════════════════════════════════════")

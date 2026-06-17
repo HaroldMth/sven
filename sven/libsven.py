@@ -87,6 +87,59 @@ try:
     except AttributeError:
         _HAS_EXTRACTOR = False
 
+    # ── checksum ──────────────────────────────────────────────
+    _lib.sven_sha256_file.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _lib.sven_sha256_file.restype = ctypes.c_int
+
+    _lib.sven_verify_checksum.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+    ]
+    _lib.sven_verify_checksum.restype = ctypes.c_int
+
+    # ── conflicts (opaque pointer ctx) ────────────────────────
+    _lib.sven_conflict_new.argtypes  = [ctypes.c_int]
+    _lib.sven_conflict_new.restype   = ctypes.c_void_p
+
+    _lib.sven_conflict_free.argtypes = [ctypes.c_void_p]
+    _lib.sven_conflict_free.restype  = None
+
+    _lib.sven_conflict_add.argtypes  = [
+        ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p,
+    ]
+    _lib.sven_conflict_add.restype   = ctypes.c_int
+
+    _lib.sven_conflict_owner.argtypes = [
+        ctypes.c_void_p, ctypes.c_char_p,
+    ]
+    _lib.sven_conflict_owner.restype  = ctypes.c_char_p
+
+    _lib.sven_conflict_check.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_char_p), ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_char_p, ctypes.c_size_t,
+        ctypes.c_char_p, ctypes.c_size_t,
+    ]
+    _lib.sven_conflict_check.restype  = ctypes.c_int
+
+    # ── pacnew / pacsave ──────────────────────────────────────
+    _lib.sven_is_config_path.argtypes = [ctypes.c_char_p]
+    _lib.sven_is_config_path.restype  = ctypes.c_int
+
+    _lib.sven_needs_pacnew.argtypes   = [ctypes.c_char_p, ctypes.c_char_p]
+    _lib.sven_needs_pacnew.restype    = ctypes.c_int
+
+    _lib.sven_save_pacnew.argtypes    = [ctypes.c_char_p, ctypes.c_char_p]
+    _lib.sven_save_pacnew.restype     = ctypes.c_int
+
+    _lib.sven_save_pacsave.argtypes   = [ctypes.c_char_p]
+    _lib.sven_save_pacsave.restype    = ctypes.c_int
+
 except OSError:
     _lib = None
     _HAS_EXTRACTOR = False
@@ -375,3 +428,166 @@ def extract_zst(archive_path: str, root_path: str) -> list[str]:
                         dest.symlink_to(member.linkname)
                         extracted.append(str(dest))
     return extracted
+
+
+# ── sha256_file ───────────────────────────────────────────────
+
+def sha256_file(path: str) -> str:
+    """Compute the SHA-256 hex digest of a file. Returns lowercase hex digest string."""
+    if _lib:
+        buf = ctypes.create_string_buffer(65)
+        if _lib.sven_sha256_file(path.encode(), buf, 65) == 0:
+            return buf.value.decode()
+    # Python fallback
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# ── verify_checksum ───────────────────────────────────────────
+
+def verify_checksum(path: str, expected_hex: str) -> bool:
+    """Verify a file's SHA-256 against expected_hex. Returns True on match, False on mismatch/error."""
+    if _lib:
+        res = _lib.sven_verify_checksum(path.encode(), expected_hex.encode())
+        return res == 1
+    # Python fallback
+    try:
+        actual = sha256_file(path)
+        return actual.lower() == expected_hex.lower()
+    except Exception:
+        return False
+
+
+# ── ConflictContext ───────────────────────────────────────────
+
+class ConflictContext:
+    """Opaque context representing the fast conflict detection hash map in C."""
+    def __init__(self, capacity: int = 1024):
+        self._ctx = None
+        if _lib:
+            self._ctx = _lib.sven_conflict_new(capacity)
+        self._fallback_map = {}
+
+    def add(self, filepath: str, owner_pkg: str):
+        filepath = filepath.lstrip('/')
+        if self._ctx:
+            _lib.sven_conflict_add(self._ctx, filepath.encode(), owner_pkg.encode())
+        else:
+            self._fallback_map[filepath] = owner_pkg
+
+    def owner(self, filepath: str) -> str | None:
+        filepath = filepath.lstrip('/')
+        if self._ctx:
+            res = _lib.sven_conflict_owner(self._ctx, filepath.encode())
+            if res:
+                return res.decode()
+            return None
+        else:
+            return self._fallback_map.get(filepath)
+
+    def check(self, new_files: list[str], installing_pkg: str) -> tuple[str, str] | None:
+        """
+        Check a list of files against the registered owners.
+        Returns (conflicting_file, owner_pkg) or None.
+        """
+        cleaned_files = [f.lstrip('/') for f in new_files]
+        if self._ctx:
+            if not cleaned_files:
+                return None
+            c_arr = (ctypes.c_char_p * len(cleaned_files))(*[f.encode() for f in cleaned_files])
+            file_buf = ctypes.create_string_buffer(1024)
+            owner_buf = ctypes.create_string_buffer(256)
+            res = _lib.sven_conflict_check(
+                self._ctx,
+                c_arr, len(cleaned_files),
+                installing_pkg.encode(),
+                file_buf, 1024,
+                owner_buf, 256,
+            )
+            if res == 1:
+                return file_buf.value.decode(), owner_buf.value.decode()
+            return None
+        else:
+            for f in cleaned_files:
+                owner = self._fallback_map.get(f)
+                if owner and owner != installing_pkg:
+                    return f, owner
+            return None
+
+    def __del__(self):
+        if self._ctx and _lib:
+            try:
+                _lib.sven_conflict_free(self._ctx)
+            except AttributeError:
+                pass
+            self._ctx = None
+
+
+# ── pacnew / pacsave ─────────────────────────────────────────
+
+def is_config_path(path: str) -> bool:
+    """Returns True if path looks like a user-editable config file (under /etc/)."""
+    if _lib:
+        return bool(_lib.sven_is_config_path(path.encode()))
+    # Python fallback
+    if not path.startswith('/etc/'):
+        return False
+    if path.endswith('/'):
+        return False
+    if any(path.endswith(ext) for ext in ('.so', '.a', '.pyc')):
+        return False
+    return True
+
+
+def needs_pacnew(dest_path: str, src_sha256: str) -> bool:
+    """Returns True if dest_path exists and its SHA-256 differs from src_sha256."""
+    if _lib:
+        res = _lib.sven_needs_pacnew(dest_path.encode(), src_sha256.encode() if src_sha256 else None)
+        return res == 1
+    # Python fallback
+    import os
+    if not os.path.exists(dest_path) or os.path.isdir(dest_path):
+        return False
+    if not src_sha256 or len(src_sha256) != 64:
+        return True
+    try:
+        existing = sha256_file(dest_path)
+        return existing.lower() != src_sha256.lower()
+    except Exception:
+        return True
+
+
+def save_pacnew(src_path: str, dest_path: str) -> bool:
+    """Copy src_path to dest_path.pacnew."""
+    if _lib:
+        return _lib.sven_save_pacnew(src_path.encode(), dest_path.encode()) == 0
+    # Python fallback
+    import shutil
+    try:
+        shutil.copy2(src_path, dest_path + '.pacnew')
+        return True
+    except Exception:
+        return False
+
+
+def save_pacsave(path: str) -> bool:
+    """Copy path to path.pacsave."""
+    if _lib:
+        return _lib.sven_save_pacsave(path.encode()) == 0
+    # Python fallback
+    import os
+    import shutil
+    if not os.path.exists(path) or os.path.isdir(path):
+        return True
+    try:
+        shutil.copy2(path, path + '.pacsave')
+        return True
+    except Exception:
+        return False

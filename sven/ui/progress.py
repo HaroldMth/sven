@@ -325,25 +325,119 @@ class MultiProgressDisplay:
         return name
 
 
-# ── Compatibility Stubs ────────────────────────────────────────
-
-class ProgressBar:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def update(self, *args, **kwargs):
-        pass
-
-    def finish(self, *args, **kwargs):
-        pass
-
+# ── Real Widgets ──────────────────────────────────────────────
 
 class Spinner:
-    def __init__(self, *args, **kwargs):
-        pass
+    """A beautiful, premium, thread-safe Unicode CLI spinner."""
+    def __init__(self, message: str = "Processing", style: str = "dots"):
+        self.message = message
+        # Modern unicode dots animation frame sequence
+        self.frames = {
+            "dots": ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+            "pulse": ["░░░", "▒░░", "▒▒░", "▒▒▒", "░▒▒", "░░▒", "░░░"],
+            "line": ["-", "\\", "|", "/"]
+        }.get(style, ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
+        self.interval = 0.08
+        self.running = False
+        self.thread = None
+        self.lock = threading.Lock()
 
-    def start(self, *args, **kwargs):
-        pass
+    def _spin(self):
+        idx = 0
+        fd = sys.stdout.fileno()
+        is_tty = os.isatty(fd)
+        if not is_tty:
+            print(f"   :: {self.message}...", flush=True)
+            return
 
-    def stop(self, *args, **kwargs):
-        pass
+        # Hide cursor
+        sys.stdout.write("\033[?25l")
+        sys.stdout.flush()
+
+        while True:
+            with self.lock:
+                if not self.running:
+                    break
+            frame = self.frames[idx % len(self.frames)]
+            colored_frame = f"\033[1;36m{frame}\033[0m"
+            sys.stdout.write(f"\r   {colored_frame}  {self.message}...")
+            sys.stdout.flush()
+            idx += 1
+            time.sleep(self.interval)
+
+        # Clear line and restore cursor
+        sys.stdout.write("\r\033[2K\033[?25h")
+        sys.stdout.flush()
+
+    def start(self):
+        with self.lock:
+            if self.running:
+                return
+            self.running = True
+        self.thread = threading.Thread(target=self._spin, daemon=True)
+        self.thread.start()
+
+    def stop(self, success: bool = True, final_msg: str = None):
+        with self.lock:
+            if not self.running:
+                return
+            self.running = False
+        if self.thread:
+            self.thread.join()
+        
+        msg = final_msg or self.message
+        if success:
+            print(f"\r   \033[1;32m✔\033[0m  {msg}")
+        else:
+            print(f"\r   \033[1;31m✘\033[0m  {msg}")
+
+
+class ProgressBar:
+    """A premium, modern terminal progress bar with colors and ETA."""
+    def __init__(self, total: int = 100, prefix: str = "", suffix: str = "", decimals: int = 1, length: int = 30):
+        self.total = total or 100
+        self.prefix = prefix
+        self.suffix = suffix
+        self.decimals = decimals
+        self.length = length
+        self.current = 0
+        self.start_time = time.time()
+        self.is_tty = os.isatty(sys.stdout.fileno())
+
+    def update(self, current: int, suffix: str = None):
+        self.current = current
+        if suffix is not None:
+            self.suffix = suffix
+        self._render()
+
+    def _render(self):
+        if not self.is_tty:
+            return
+
+        percent = ("{0:." + str(self.decimals) + "f}").format(100 * (self.current / float(self.total)))
+        filled_length = int(self.length * self.current // self.total)
+        bar_fill = "█" * filled_length + "░" * (self.length - filled_length)
+        
+        if self.current >= self.total:
+            colored_bar = f"\033[32m{bar_fill}\033[0m"
+        else:
+            colored_bar = f"\033[36m{bar_fill}\033[0m"
+
+        elapsed = time.time() - self.start_time
+        speed = self.current / elapsed if elapsed > 0 else 0
+        if speed > 0 and self.current < self.total:
+            eta = (self.total - self.current) / speed
+            eta_str = f" | ETA {eta:.1f}s"
+        else:
+            eta_str = ""
+
+        sys.stdout.write(f"\r   {self.prefix} [{colored_bar}] {percent}% {self.suffix}{eta_str}")
+        sys.stdout.flush()
+
+    def finish(self, success: bool = True, final_msg: str = None):
+        if not self.is_tty:
+            return
+        self.current = self.total
+        self._render()
+        sys.stdout.write("\n")
+        sys.stdout.flush()

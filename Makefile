@@ -10,11 +10,14 @@ CC      = gcc
 CFLAGS  = -O2 -Wall -fPIC -shared
 
 # Core C sources (no external deps required)
-CORE_SRC = libsven/vercmp.c \
-           libsven/hooks.c  \
-           libsven/resolver.c \
-           libsven/filter.c   \
-           libsven/graph.c
+CORE_SRC = libsven/vercmp.c    \
+           libsven/hooks.c      \
+           libsven/resolver.c   \
+           libsven/filter.c     \
+           libsven/graph.c      \
+           libsven/checksum.c   \
+           libsven/conflicts.c  \
+           libsven/pacnew.c
 
 # Check whether libarchive is available
 HAVE_ARCHIVE := $(shell pkg-config --exists libarchive 2>/dev/null && echo 1 || echo 0)

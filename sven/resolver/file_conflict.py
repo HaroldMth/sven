@@ -66,54 +66,36 @@ def check_file_conflicts(
     if not new_files:
         return []
 
-    # Build a reverse index: file → owning package
-    # This is expensive but necessary for correctness
-    file_owners = _build_file_ownership_map(local_db, exclude_pkg=pkg.name)
+    from ..libsven import ConflictContext
+
+    ctx = ConflictContext()
+    for other_pkg in local_db.all_packages():
+        if other_pkg.name == pkg.name:
+            continue
+        for f in local_db.get_files(other_pkg.name):
+            ctx.add(f, other_pkg.name)
 
     conflicts = []
-    for filepath in new_files:
-        owner = file_owners.get(filepath)
-        if owner and owner != pkg.name:
-            conflicts.append({
-                "file": filepath,
-                "owner": owner,
-                "new_pkg": pkg.name,
-            })
-
-    if conflicts and not force:
-        # Report the first conflict as an error
-        first = conflicts[0]
-        raise FileConflictError(
-            filename=first["file"],
-            owner_pkg=first["owner"],
-            new_pkg=first["new_pkg"],
-        )
+    res = ctx.check(new_files, pkg.name)
+    if res:
+        if not force:
+            conflicting_file, owner = res
+            raise FileConflictError(
+                filename=conflicting_file,
+                owner_pkg=owner,
+                new_pkg=pkg.name,
+            )
+        else:
+            for filepath in new_files:
+                owner = ctx.owner(filepath)
+                if owner and owner != pkg.name:
+                    conflicts.append({
+                        "file": filepath,
+                        "owner": owner,
+                        "new_pkg": pkg.name,
+                    })
 
     return conflicts
-
-
-def _build_file_ownership_map(
-    local_db: LocalDB,
-    exclude_pkg: Optional[str] = None,
-) -> dict[str, str]:
-    """
-    Build a dict mapping every installed file to its owning package.
-    Skips the exclude_pkg (used during upgrades where the same
-    package is being replaced).
-    """
-    ownership = {}
-
-    for pkg in local_db.all_packages():
-        if exclude_pkg and pkg.name == exclude_pkg:
-            continue
-
-        files = local_db.get_files(pkg.name)
-        for f in files:
-            # Normalise path
-            f = f.lstrip("/")
-            ownership[f] = pkg.name
-
-    return ownership
 
 
 def check_internal_conflicts(packages: list[Package], archives: dict[str, str]) -> list[dict]:

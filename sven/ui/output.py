@@ -26,44 +26,39 @@ def print_banner():
         print(b)
 
 def print_section(title: str):
-    """:: cyan for section headers"""
-    msg = f":: {title}"
+    """Sleek modern section header with colored left prefix"""
     if color_enabled:
-        print(f"\033[96m{msg}\033[0m")  # Cyan
+        print(f"\n\033[1;38;5;99m▍\033[0;1m {title}\033[0m")
     else:
-        print(msg)
+        print(f"\n::: {title} :::")
 
 def print_step(text: str):
-    """→ white for steps/logs"""
-    msg = f"   → {text}"
+    """→ cyan for steps/logs"""
     if color_enabled:
-        print(f"\033[97m{msg}\033[0m")  # White
+        print(f"   \033[1;38;5;45m→\033[0m {text}")
     else:
-        print(msg)
+        print(f"   → {text}")
 
 def print_success(text: str):
-    """✓ green for success"""
-    msg = f"✓  {text}"
+    """✔ green for success"""
     if color_enabled:
-        print(f"\033[92m{msg}\033[0m")  # Green
+        print(f"   \033[1;32m✔\033[0m  {text}")
     else:
-        print(msg)
+        print(f"   ✓  {text}")
 
 def print_error(text: str):
-    """✗ red for errors"""
-    msg = f"✗  {text}"
+    """✘ red for errors"""
     if color_enabled:
-        print(f"\033[91m{msg}\033[0m")  # Red
+        print(f"   \033[1;31m✘\033[0m  {text}")
     else:
-        print(msg)
+        print(f"   ✗  {text}")
 
 def print_warning(text: str):
     """⚠ yellow for warnings"""
-    msg = f"⚠  {text}"
     if color_enabled:
-        print(f"\033[93m{msg}\033[0m")  # Yellow
+        print(f"   \033[1;33m⚠\033[0m  {text}")
     else:
-        print(msg)
+        print(f"   ⚠  {text}")
 
 def print_info(text: str):
     """Standard print with indentation"""

@@ -37,14 +37,12 @@ def verify_checksum(
     if not expected_sha256:
         return True
 
+    from ..libsven import sha256_file
+
     try:
-        # Run native sha256sum utility
-        output = subprocess.check_output(["sha256sum", str(p)], stderr=subprocess.STDOUT).decode()
-        # Output format: "hash  filename"
-        actual = output.split()[0].strip()
+        actual = sha256_file(str(p))
     except Exception as e:
-        print(f"   ⚠ Error running sha256sum: {e}")
-        # Fallback to a basic check or fail
+        print(f"   ⚠ Error calculating checksum: {e}")
         raise
 
     if actual != expected_sha256:
