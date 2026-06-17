@@ -11,6 +11,8 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    env:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
 
     steps:
       - uses: actions/checkout@v4
@@ -47,14 +49,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update AUR PKGBUILD checksums
-        if: ${{ secrets.AUR_SSH_PRIVATE_KEY != '' }}
+        if: ${{ env.AUR_SSH_PRIVATE_KEY != '' }}
         run: |
           CSUM=$(awk '{print $1}' dist/SHA256SUMS)
           sed -i "s/sha256sums=('SKIP')/sha256sums=('${CSUM}')/" PKGBUILD
           sed -i "s/pkgver=.*/pkgver=${GITHUB_REF_NAME#v}/" PKGBUILD
 
       - name: Publish AUR Package (sven-bin)
-        if: ${{ secrets.AUR_SSH_PRIVATE_KEY != '' }}
+        if: ${{ env.AUR_SSH_PRIVATE_KEY != '' }}
         continue-on-error: true
         uses: KSXGitHub/github-actions-deploy-aur@v3.0.1
         with:
