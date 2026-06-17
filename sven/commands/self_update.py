@@ -61,7 +61,7 @@ def run():
     
     # Download securely to a temporary file
     try:
-        fd, temp_path = tempfile.mkstemp()
+        fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(executable_path) or "/usr/bin")
         with os.fdopen(fd, 'wb') as f:
             chunk_resp = requests.get(download_url, stream=True, timeout=30)
             chunk_resp.raise_for_status()
@@ -103,4 +103,6 @@ def run():
         
     except Exception as e:
         print_error(f"Failed to write executable to {executable_path}: {e}")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         sys.exit(1)
