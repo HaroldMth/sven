@@ -130,7 +130,7 @@ class DependencyGraph:
         if not op or not req_ver:
             return
         if not dep_satisfied(pkg.version, op, req_ver):
-            raise VersionConstraintError(pkg.name, pkg.version, op, req_ver)
+            raise VersionConstraintError(pkg.name, f"{op}{req_ver}", pkg.version)
 
     def _resolve_package(
         self,

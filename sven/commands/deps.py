@@ -3,7 +3,10 @@
 #  HANS TECH © 2024 — GPL v3
 #  sven/commands/deps.py
 # ============================================================
-from ..resolver.graph import GraphBuilder
+from ..db.sync_db import SyncDB
+from ..db.aur_db import AURDB
+from ..db.local_db import LocalDB
+from ..resolver.graph import DependencyGraph
 from ..ui import print_banner, print_section
 
 def run(pkg_name: str, reverse: bool = False):
@@ -14,7 +17,8 @@ def run(pkg_name: str, reverse: bool = False):
         print("   (Reverse dependency tree simulated)")
     else:
         print_section(f"Dependency tree for {pkg_name}:")
-        graph = GraphBuilder().build([pkg_name])
+        graph = DependencyGraph(SyncDB(), AURDB(), LocalDB())
+        graph.add_package(pkg_name)
         data = graph.get_graph_data()
         
         # Simple tree dump
