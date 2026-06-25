@@ -210,6 +210,42 @@ class LocalDB:
             if p.name not in all_deps
         ]
 
+    def count_upgradable(self, sync_db=None) -> Optional[int]:
+        """
+        Cheap, banner-friendly estimate of how many installed packages have
+        a newer version in the synced database. This is a plain version
+        comparison only — no dependency graph, no AUR, no conflict checks.
+        It will never be invoked for anything except a glanceable count;
+        `sven upgrade` remains the real source of truth via UpgradeTransaction.
+        Returns None (not 0) when no sync data exists — "no sync yet" and
+        "confirmed zero upgrades" are different facts and must not collapse
+        into the same misleadingly-confident number.
+        """
+        if sync_db is None:
+            from .sync_db import SyncDB
+            sync_db = SyncDB()
+
+        from ..libsven import vercmp
+
+        try:
+            sync_db._ensure_loaded()
+        except Exception:
+            return None  # never synced yet — genuinely unknown, not zero
+
+        count = 0
+        for pkg in self.all_packages():
+            if pkg.origin == "aur" or not pkg.version_verified:
+                continue  # AUR needs network; unverified versions can't compare meaningfully
+            latest = sync_db.get(pkg.name)
+            if latest is None:
+                continue
+            try:
+                if vercmp(latest.version, pkg.version) > 0:
+                    count += 1
+            except Exception:
+                continue
+        return count
+
     def remove(self, name: str):
         self.unregister(name)
 

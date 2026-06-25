@@ -5,7 +5,8 @@
 # ============================================================
 from .output import (
     print_banner, print_section, print_step, 
-    print_success, print_error, print_warning, print_info, disable_colors
+    print_success, print_error, print_warning, print_info, disable_colors,
+    print_error_box, print_section_banner,
 )
 from .progress import ProgressBar, Spinner
 from .prompt import confirm, show_package_list, show_pkgbuild_review, show_hook_review, next_steps
@@ -19,6 +20,8 @@ __all__ = [
     "print_warning",
     "print_info",
     "disable_colors",
+    "print_error_box",
+    "print_section_banner",
     "ProgressBar",
     "Spinner",
     "confirm",

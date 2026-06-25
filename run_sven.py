@@ -15,7 +15,7 @@ except KeyboardInterrupt:
 except Exception as e:
     import traceback
     
-    # Log technical details for HANS TECH support
+    # Log technical details for support
     try:
         with open("/var/log/sven/error.log", "a") as f:
             f.write(f"\n[{datetime.now()}] CRITICAL: {str(e)}\n")
@@ -23,8 +23,11 @@ except Exception as e:
     except:
         pass
 
-    print(f"\n   ╭──────────────────────────────────────────────────╮")
-    print(f"   │  SVEN ERROR: {str(e)[:45]}...")
-    print(f"   ╰──────────────────────────────────────────────────╯")
-    print(f"   Check /var/log/sven/error.log for technical details.")
+    try:
+        from sven.ui.output import print_error_box
+        print_error_box(str(e))
+    except Exception:
+        # Last-resort fallback if sven.ui itself is what's broken
+        print(f"\n   SVEN ERROR: {str(e)[:60]}")
+        print(f"   Check /var/log/sven/error.log for technical details.")
     sys.exit(1)

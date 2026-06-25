@@ -10,22 +10,6 @@ import sys
 from .constants import VERSION, APP_NAME, OS_NAME, BRAND
 
 
-BANNER = f"""
-╔══════════════════════════════════════════════════╗
-║                                                  ║
-║   ███████╗██╗   ██╗███████╗███╗   ██╗            ║
-║   ██╔════╝██║   ██║██╔════╝████╗  ██║            ║
-║   ███████╗██║   ██║█████╗  ██╔██╗ ██║            ║
-║   ╚════██║╚██╗ ██╔╝██╔══╝  ██║╚██╗██║            ║
-║   ███████║ ╚████╔╝ ███████╗██║ ╚████║            ║
-║   ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝            ║
-║                                                  ║
-║   v{VERSION}  ·  {OS_NAME} Package Manager            ║
-║   by {BRAND}                                   ║
-╚══════════════════════════════════════════════════╝
-"""
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=APP_NAME,
@@ -203,7 +187,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-LARGE_BANNER = f"""\033[94m╔══════════════════════════════════════════════════╗
+LARGE_LOGO = """╔══════════════════════════════════════════════════╗
 ║                                                  ║
 ║   ███████╗██╗   ██╗███████╗███╗   ██╗            ║
 ║   ██╔════╝██║   ██║██╔════╝████╗  ██║            ║
@@ -212,10 +196,37 @@ LARGE_BANNER = f"""\033[94m╔════════════════�
 ║   ███████║ ╚████╔╝ ███████╗██║ ╚████║            ║
 ║   ╚══════╝  ╚═══╝  ╚══════╝╚═╝  ╚═══╝            ║
 ║                                                  ║
-║   v{VERSION}  ·  Seven OS Package Manager            ║
-║   by {BRAND}                                   ║
-╚══════════════════════════════════════════════════╝\033[0m
-"""
+╚══════════════════════════════════════════════════╝"""
+
+
+def print_large_banner(no_color: bool = False):
+    """
+    Shown only on bare `sven` with no command. The logo box stays fixed-width
+    ASCII art; live status (package count, sync health, upgrades) prints
+    below it using the same bar+dot convention as print_banner(), rather than
+    trying to cram variable-length numbers inside fixed box-drawing borders.
+    """
+    from .ui.output import _collect_status, color_enabled
+
+    if no_color:
+        print(LARGE_LOGO)
+    else:
+        print(f"\033[94m{LARGE_LOGO}\033[0m")
+
+    s = _collect_status()
+    color = s["sync_color"]
+    dim, reset = "\033[2m", "\033[0m"
+    if no_color or not color_enabled:
+        color = dim = reset = ""
+
+    print(f"{color}●{reset} v{VERSION} · {dim}{s['init_system']} · {s['pkg_label']}{reset}")
+    line2 = [s["sync_label"]]
+    if s["upgrades"] is not None:
+        line2.append(f"{s['upgrades']} upgrade{'s' if s['upgrades'] != 1 else ''} available")
+    if s["orphans"]:
+        line2.append(f"{s['orphans']} orphan{'s' if s['orphans'] != 1 else ''}")
+    print(f"  {dim}{' · '.join(line2)}{reset}")
+    print()
 
 def main():
     parser = build_parser()
@@ -250,10 +261,7 @@ def main():
     config.dry_run = bool(getattr(args, "dry_run", False))
 
     if args.command is None:
-        if not (hasattr(args, "no_color") and args.no_color):
-            print(LARGE_BANNER)
-        else:
-            print(LARGE_BANNER.replace("\033[94m", "").replace("\033[0m", ""))
+        print_large_banner(no_color=bool(getattr(args, "no_color", False)))
         parser.print_help()
         sys.exit(0)
 

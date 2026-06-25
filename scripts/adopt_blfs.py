@@ -188,10 +188,8 @@ def adopt(min_score: int = 5, dry_run: bool = False, assume_yes: bool = False):
     local_db = LocalDB()
     sync_db = SyncDB()
 
-    print("   ╭──────────────────────────────────────────────────╮")
-    print("   │  Sven BLFS Auto-Discovery & Adoption             │")
-    print("   ╰──────────────────────────────────────────────────╯")
-    print()
+    from sven.ui.output import print_section_banner
+    print_section_banner("Sven BLFS Auto-Discovery & Adoption")
 
     print("   [1/3] Scanning filesystem...")
     system_libs = scan_shared_libraries()

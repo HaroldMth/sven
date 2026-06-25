@@ -171,9 +171,8 @@ def run_preflight() -> tuple[bool, list[CheckResult]]:
 
 def print_preflight_report(results: list[CheckResult]):
     """Pretty-print preflight check results."""
-    print("\n   ╭──────────────────────────────────────────╮")
-    print("   │         Sven Preflight Check             │")
-    print("   ╰──────────────────────────────────────────╯\n")
+    from .ui.output import print_section_banner
+    print_section_banner("Sven Preflight Check")
 
     for r in results:
         icon = "✓" if r.available else "✗"

@@ -44,55 +44,142 @@ def _sync_status() -> tuple[str, str]:
     return (color, label)
 
 
+def _disk_free_label(path: str) -> str:
+    try:
+        import shutil
+        free_gb = shutil.disk_usage(path).free / (1024 ** 3)
+        return f"{free_gb:.1f} GB free"
+    except Exception:
+        return None
+
+
+def _collect_status() -> dict:
+    """
+    Gather every field the status banners can show, each independently
+    best-effort — one field failing (e.g. no sync data yet) never blocks
+    the others. Shared by print_banner() and the bare `sven` help screen
+    so the two can't drift into reporting different numbers.
+    """
+    status = {
+        "init_system": "unknown",
+        "pkg_label": "? packages",
+        "upgrades": None,
+        "orphans": None,
+        "disk_free": None,
+        "dry_run": False,
+        "custom_root": None,
+        "sync_color": "\033[1;33m",
+        "sync_label": "never synced",
+    }
+
+    config = None
+    try:
+        from ..config import get_config
+        config = get_config()
+        status["init_system"] = config.init_system
+    except Exception:
+        pass
+
+    local_db = None
+    try:
+        from ..db.local_db import LocalDB
+        local_db = LocalDB()
+        pkgs = local_db.all_packages()
+        explicit = sum(1 for p in pkgs if p.explicit)
+        status["pkg_label"] = f"{len(pkgs):,} packages ({explicit:,} explicit)"
+    except Exception:
+        pass
+
+    if local_db is not None:
+        try:
+            status["orphans"] = len(local_db.orphans())
+        except Exception:
+            pass
+        try:
+            status["upgrades"] = local_db.count_upgradable()
+        except Exception:
+            pass
+
+    status["sync_color"], status["sync_label"] = _sync_status()
+
+    if config is not None:
+        status["dry_run"] = bool(getattr(config, "dry_run", False))
+        try:
+            from ..constants import DEFAULT_ROOT
+            if config.install_root not in (DEFAULT_ROOT, "/"):
+                status["custom_root"] = config.install_root
+            status["disk_free"] = _disk_free_label(config.install_root)
+        except Exception:
+            pass
+
+    return status
+
+
 def print_banner():
     """
     Status-aware header shown before most commands. Carries real, glanceable
     state instead of branding: the bar+dot color *is* the health signal
-    (green = synced & healthy, yellow = stale or never synced, red = last
+    (green = synced & healthy, yellow = stale/never synced, red = last
     sync failed) — one signal to read, not separate icons to learn.
     """
     from ..constants import VERSION
 
-    try:
-        from ..config import get_config
-        config = get_config()
-        init_system = config.init_system
-    except Exception:
-        config = None
-        init_system = "unknown"
-
-    try:
-        from ..db.local_db import LocalDB
-        pkg_count = len(LocalDB().list_installed())
-        pkg_label = f"{pkg_count:,} package{'s' if pkg_count != 1 else ''}"
-    except Exception:
-        pkg_label = "? packages"
-
-    color, sync_label = _sync_status()
+    s = _collect_status()
+    color = s["sync_color"]
     dim, reset, bold, rev = "\033[2m", "\033[0m", "\033[1m", "\033[7m"
 
     if not color_enabled:
         color = dim = reset = bold = rev = ""
 
-    line1 = f"{color}┃{reset} {color}●{reset} {bold}{rev} SVEN {reset} v{VERSION}"
-    line2 = f"{color}┃{reset} {dim}{init_system} · {pkg_label} · {reset}{color}{sync_label}{reset}"
-    print(line1)
-    print(line2)
+    print(f"{color}┃{reset} {color}●{reset} {bold}{rev} SVEN {reset} v{VERSION}")
+    print(f"{color}┃{reset} {dim}{s['init_system']} · {s['pkg_label']} · {reset}{color}{s['sync_label']}{reset}")
+
+    line3 = []
+    if s["upgrades"] is not None:
+        line3.append(f"{s['upgrades']} upgrade{'s' if s['upgrades'] != 1 else ''} available")
+    if s["orphans"]:
+        line3.append(f"{s['orphans']} orphan{'s' if s['orphans'] != 1 else ''}")
+    if s["disk_free"]:
+        line3.append(s["disk_free"])
+    if line3:
+        print(f"{color}┃{reset} {dim}{' · '.join(line3)}{reset}")
 
     extras = []
-    if config is not None:
-        if getattr(config, "dry_run", False):
-            extras.append("dry-run")
-        try:
-            from ..constants import DEFAULT_ROOT
-            if config.install_root not in (DEFAULT_ROOT, "/"):
-                extras.append(f"root={config.install_root}")
-        except Exception:
-            pass
-
+    if s["dry_run"]:
+        extras.append("dry-run")
+    if s["custom_root"]:
+        extras.append(f"root={s['custom_root']}")
     if extras:
         warn = "\033[1;33m" if color_enabled else ""
         print(f"{warn}┃ ⚠ {' · '.join(extras)}{reset}")
+
+
+def print_error_box(message: str, max_len: int = 60):
+    """
+    Shared crash-handler display for __main__.py and run_sven.py — single
+    implementation so the two entry points can't drift from each other.
+    Callers should wrap the import of this function itself in a try/except,
+    since it's invoked from top-level exception handlers that may be
+    catching an error from deep inside sven's own import chain.
+    """
+    red = "\033[1;31m" if color_enabled else ""
+    reset = "\033[0m" if color_enabled else ""
+    truncated = message[:max_len] + ("…" if len(message) > max_len else "")
+    print(f"\n{red}┃{reset} {red}●{reset} SVEN ERROR")
+    print(f"{red}┃{reset} {truncated}")
+    print("  Check /var/log/sven/error.log for technical details.")
+
+
+def print_section_banner(title: str):
+    """
+    Neutral bar-style header for scripts/subcommands that need a title block
+    but aren't reporting sync health (preflight, adoption scripts) — cyan,
+    deliberately distinct from the health-coded green/yellow/red elsewhere,
+    so it never reads as a status signal.
+    """
+    accent = "\033[1;36m" if color_enabled else ""
+    reset = "\033[0m" if color_enabled else ""
+    print(f"\n{accent}┃{reset} {title}\n")
 
 def print_section(title: str):
     """Sleek modern section header with colored left prefix"""
