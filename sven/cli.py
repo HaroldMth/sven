@@ -142,6 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("version", help="Show Sven, runtime, and tool versions")
 
     # ── doctor ─────────────────────────────────────────────────
+    p_doctor = subparsers.add_parser("doctor", help="Run a full system health check")
+    p_doctor.add_argument("--offline", action="store_true", help="Skip network/mirror reachability checks")
+
+    # ── preflight ─────────────────────────────────────────────
+    subparsers.add_parser(
+        "preflight",
+        help="Quick pre-install environment check (Python, requests, GPG, git, tar+zstd)",
+    )
 
     # ── clean ─────────────────────────────────────────────────
     p_clean = subparsers.add_parser("clean", help="Clear package cache")
@@ -250,7 +258,7 @@ def main():
 
     # ── Automagic Update Check ────────────────────────────────
     # We do not check on self-update or check-update commands to avoid redundancy
-    if args.command not in ("self-update", "check-update", "doctor"):
+    if args.command not in ("self-update", "check-update", "doctor", "preflight"):
         from .core.updater import check_for_updates_silently
         check_for_updates_silently()
 
@@ -316,6 +324,12 @@ def main():
     elif cmd == "doctor":
         from .commands.doctor import run as doctor_run
         doctor_run(offline=getattr(args, "offline", False))
+    elif cmd == "preflight":
+        from .preflight import run_preflight, print_preflight_report
+        ok, results = run_preflight()
+        print_preflight_report(results)
+        if not ok:
+            sys.exit(1)
     elif cmd == "clean":
         from .commands.clean import run
         run(all_cache=args.all if hasattr(args, "all") else False)

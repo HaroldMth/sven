@@ -206,6 +206,26 @@ def run(offline: bool = False) -> None:
     except ImportError:
         warn("Python module `gnupg` not installed — Sven may fall back to gpg binary only")
 
+    # ── C performance layer ───────────────────────────────────
+    from .. import libsven as _libsven_mod
+    so_path = Path(__file__).resolve().parent.parent / "libsven_core.so"
+    if _libsven_mod._lib is not None:
+        ok(f"C performance library loaded → {so_path}")
+        if getattr(_libsven_mod, "_HAS_EXTRACTOR", False):
+            ok("Fast C extractor (libarchive) active for package extraction")
+        else:
+            warn(
+                "C extractor not compiled in (libarchive-dev missing at build time) — "
+                "falling back to slower Python tarfile/zstandard extraction. "
+                "Install libarchive-dev and run: make build"
+            )
+    else:
+        warn(
+            f"C performance library not found or failed to load → {so_path}\n"
+            "      Sven will run correctly but slower (pure-Python fallbacks for "
+            "version comparison, dependency resolution, and extraction). Run: make build"
+        )
+
     # ── Network (optional) ────────────────────────────────────
     if offline:
         print_info("Skipping network checks (--offline).")

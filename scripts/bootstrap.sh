@@ -189,6 +189,24 @@ else
     warn "Could not import sven module. Check installation."
 fi
 
+# ── Step 9: Create a runnable launcher ──────────────────────
+# This script only prepares the environment — without this, none of
+# the "next steps" below would actually work, since there'd be no
+# `sven` command on PATH yet.
+BINARY_DST="/usr/bin/sven"
+if [ ! -e "$BINARY_DST" ]; then
+    info "Creating source-tree launcher at ${BINARY_DST}..."
+    cat > "$BINARY_DST" <<EOF
+#!/bin/bash
+export PYTHONPATH="$SVEN_DIR"
+exec python3 "$SVEN_DIR/run_sven.py" "\$@"
+EOF
+    chmod +x "$BINARY_DST"
+    ok "Launcher created → ${BINARY_DST}"
+else
+    ok "${BINARY_DST} already exists — leaving it as-is"
+fi
+
 # ── Done ────────────────────────────────────────────────────
 echo ""
 echo "  ╭──────────────────────────────────────────╮"

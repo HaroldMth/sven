@@ -129,6 +129,14 @@ class DependencyGraph:
         """Verify installed version satisfies constraint using C sven_dep_satisfied."""
         if not op or not req_ver:
             return
+        if not pkg.version_verified:
+            from ..ui.output import print_warning
+            print_warning(
+                f"{pkg.name}: version is unverified ({pkg.version!r}) — "
+                f"skipping check against {op}{req_ver}. This package was adopted "
+                f"without a confirmed version; reinstall via Sven to get full version tracking."
+            )
+            return
         if not dep_satisfied(pkg.version, op, req_ver):
             raise VersionConstraintError(pkg.name, f"{op}{req_ver}", pkg.version)
 

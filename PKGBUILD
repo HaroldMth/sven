@@ -14,7 +14,7 @@ sha256sums=('SKIP') # Use actual sha256 in production or use workflow to inline 
 
 package() {
     # Install binary
-    install -Dm755 "${srcdir}/sven-x86_64-linux" "${pkgdir}/usr/local/bin/sven"
+    install -Dm755 "${srcdir}/sven-x86_64-linux" "${pkgdir}/usr/bin/sven"
     
     # Create required directory structure
     install -dm755 "${pkgdir}/var/lib/sven/installed"

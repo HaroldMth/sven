@@ -146,6 +146,7 @@ class LocalDB:
             explicit         = data.get("explicit", True),
             install_date     = data.get("install_date"),
             aur_maintainer   = data.get("aur_maintainer", ""),
+            version_verified = data.get("version_verified", True),
         )
 
     # ── Query ─────────────────────────────────────────────────
@@ -270,6 +271,7 @@ class LocalDB:
             "explicit"      : pkg.explicit,
             "install_date"  : pkg.install_date,
             "aur_maintainer": pkg.aur_maintainer,
+            "version_verified": pkg.version_verified,
         }
 
         with open(entry_dir / "desc", "w") as f:

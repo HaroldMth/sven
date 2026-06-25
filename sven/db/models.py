@@ -60,6 +60,8 @@ class Package:
     # ── Install state ─────────────────────────────────────────
     explicit        : bool              = True       # manually installed
     install_date    : Optional[int]     = None       # unix timestamp
+    version_verified: bool              = True        # False = version is a best-effort/placeholder,
+                                                        # not a real comparable version string
 
     # ── Helpers ──────────────────────────────────────────────
 

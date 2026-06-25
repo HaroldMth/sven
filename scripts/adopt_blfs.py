@@ -11,10 +11,10 @@ against entries in the SyncDB to determine which Arch packages
 are already present on the system (built manually from LFS/BLFS).
 
 Usage (inside chroot):
-    python3 /home/harold/Desktop/sven/scripts/adopt_blfs.py
+    python3 scripts/adopt_blfs.py
 
 Or with PYTHONPATH:
-    PYTHONPATH=/home/harold/Desktop/sven python3 scripts/adopt_blfs.py
+    PYTHONPATH=. python3 scripts/adopt_blfs.py
 """
 
 import argparse
@@ -29,101 +29,102 @@ from sven.config import get_config
 from sven.db.local_db import LocalDB
 from sven.db.sync_db import SyncDB
 from sven.db.models import Package
+from sven.version_probe import generic_probe
 
 
 # ── Directories to scan ─────────────────────────────────────
 
-SCAN_DIRS = [
-    "/usr/lib",
-    "/usr/lib64",
-    "/usr/bin",
-    "/usr/sbin",
-    "/usr/share/pkgconfig",
-    "/usr/lib/pkgconfig",
-    "/usr/include",
-]
-
-# Files that strongly indicate a package is present
-# Maps: filename pattern -> likely package name(s)
-# We'll also use the SyncDB provides/files data
+LIB_SCAN_DIRS = ["/usr/lib", "/usr/lib64", "/lib", "/lib64",
+                  "/usr/lib/x86_64-linux-gnu", "/lib/x86_64-linux-gnu"]
+BIN_SCAN_DIRS = ["/usr/bin", "/usr/sbin"]
+PC_SCAN_DIRS  = ["/usr/lib/pkgconfig", "/usr/lib64/pkgconfig",
+                  "/usr/share/pkgconfig", "/usr/lib/x86_64-linux-gnu/pkgconfig"]
 
 
-def scan_shared_libraries() -> set[str]:
-    """Find all .so files on the system."""
-    libs = set()
-    for scan_dir in ["/usr/lib", "/usr/lib64"]:
+def scan_shared_libraries() -> dict[str, str]:
+    """Find all .so files on the system. Returns {basename: full_path}."""
+    libs = {}
+    for scan_dir in LIB_SCAN_DIRS:
         p = Path(scan_dir)
         if not p.exists():
             continue
         for f in p.rglob("*.so*"):
             if f.is_file() or f.is_symlink():
-                libs.add(f.name)
+                libs[f.name] = str(f)
     return libs
 
 
-def scan_binaries() -> set[str]:
-    """Find all binaries in standard paths."""
-    bins = set()
-    for scan_dir in ["/usr/bin", "/usr/sbin"]:
+def scan_binaries() -> dict[str, str]:
+    """Find all binaries in standard paths. Returns {name: full_path}."""
+    bins = {}
+    for scan_dir in BIN_SCAN_DIRS:
         p = Path(scan_dir)
         if not p.exists():
             continue
         for f in p.iterdir():
             if f.is_file() or f.is_symlink():
-                bins.add(f.name)
+                bins[f.name] = str(f)
     return bins
 
 
-def scan_pkgconfig() -> set[str]:
-    """Find all .pc files (pkgconfig) on the system."""
-    pcs = set()
-    for scan_dir in ["/usr/lib/pkgconfig", "/usr/lib64/pkgconfig", "/usr/share/pkgconfig"]:
+def scan_pkgconfig() -> dict[str, str]:
+    """Find all .pc files. Returns {stem: full_path}."""
+    pcs = {}
+    for scan_dir in PC_SCAN_DIRS:
         p = Path(scan_dir)
         if not p.exists():
             continue
         for f in p.glob("*.pc"):
-            # e.g. "Qt6Core.pc" -> "Qt6Core"
-            pcs.add(f.stem)
+            pcs[f.stem] = str(f)
     return pcs
 
 
-def scan_include_dirs() -> set[str]:
-    """Find all include directories (headers)."""
-    dirs = set()
+def scan_include_dirs() -> dict[str, str]:
+    """Find all include directories (headers). Returns {lowername: full_path}."""
+    dirs = {}
     p = Path("/usr/include")
     if p.exists():
         for d in p.iterdir():
             if d.is_dir():
-                dirs.add(d.name.lower())
+                dirs[d.name.lower()] = str(d)
     return dirs
 
 
 def match_packages(sync_db: SyncDB, local_db: LocalDB,
-                   system_libs: set, system_bins: set,
-                   system_pcs: set, system_includes: set,
-                   min_score: int = 5) -> list[Package]:
+                   system_libs: dict, system_bins: dict,
+                   system_pcs: dict, system_includes: dict,
+                   min_score: int = 5) -> list[tuple]:
     """
     Match system artifacts against SyncDB entries.
-    Returns a list of Package objects that should be adopted.
+    Returns a list of (pkg, score, reasons, evidence_files) tuples.
+
+    A candidate is only accepted if EITHER:
+      - it has an exact binary-name match (strong signal on its own), OR
+      - signals from at least 2 distinct categories combine to >= min_score
+
+    This prevents a single generic/coincidental match (e.g. a common .so
+    naming pattern) from being enough on its own to adopt the wrong package.
     """
     already_installed = set(local_db.list_installed())
     candidates = []
 
-    # Get ALL packages from the sync databases
     all_packages = sync_db.all_packages()
 
     for pkg in all_packages:
-        # Skip if already in LocalDB
         if pkg.name in already_installed:
             continue
 
         score = 0
         reasons = []
+        categories: set[str] = set()
+        evidence: set[str] = set()
 
         # Check 1: Package name matches a binary
         if pkg.name in system_bins:
             score += 10
             reasons.append(f"binary: {pkg.name}")
+            categories.add("binary")
+            evidence.add(system_bins[pkg.name])
 
         # Check 2: Package provides match installed .so files
         for prov in pkg.provides:
@@ -131,40 +132,53 @@ def match_packages(sync_db: SyncDB, local_db: LocalDB,
             if prov_name in system_libs:
                 score += 8
                 reasons.append(f"provides: {prov_name}")
+                categories.add("provides")
+                evidence.add(system_libs[prov_name])
 
         # Check 3: Package name matches a .pc file
         pkg_lower = pkg.name.lower()
-        for pc in system_pcs:
-            if pc.lower() == pkg_lower or pc.lower().startswith(pkg_lower):
+        for pc_name, pc_path in system_pcs.items():
+            if pc_name.lower() == pkg_lower or pc_name.lower().startswith(pkg_lower):
                 score += 6
-                reasons.append(f"pkgconfig: {pc}")
+                reasons.append(f"pkgconfig: {pc_name}")
+                categories.add("pkgconfig")
+                evidence.add(pc_path)
                 break
 
         # Check 4: Package name matches an include directory
         if pkg_lower in system_includes:
             score += 4
             reasons.append(f"include: {pkg_lower}")
+            categories.add("include")
+            evidence.add(system_includes[pkg_lower])
 
-        # Check 5: Common .so naming convention
-        # e.g. "libfoo" package -> "libfoo.so" on disk
+        # Check 5: Common .so naming convention ("libfoo" pkg -> "libfoo.so")
         expected_so = f"{pkg.name}.so"
-        if expected_so in system_libs:
-            score += 7
-            reasons.append(f"lib: {expected_so}")
+        for so_name, so_path in system_libs.items():
+            if so_name == expected_so or so_name.startswith(expected_so + "."):
+                score += 7
+                reasons.append(f"lib: {so_name}")
+                categories.add("lib_exact")
+                evidence.add(so_path)
+                break
 
-        # Check 6: lib-prefixed convention
-        # e.g. "foo" package -> "libfoo.so"
+        # Check 6: lib-prefixed convention ("foo" pkg -> "libfoo.so")
         if not pkg.name.startswith("lib"):
-            alt_so = f"lib{pkg.name}.so"
-            if alt_so in system_libs:
-                score += 5
-                reasons.append(f"lib: {alt_so}")
+            alt_prefix = f"lib{pkg.name}.so"
+            for so_name, so_path in system_libs.items():
+                if so_name == alt_prefix or so_name.startswith(alt_prefix + "."):
+                    score += 5
+                    reasons.append(f"lib: {so_name}")
+                    categories.add("lib_prefixed")
+                    evidence.add(so_path)
+                    break
 
-        # Threshold: need at least one strong match
-        if score >= min_score:
-            candidates.append((pkg, score, reasons))
+        strong_alone = "binary" in categories
+        enough_categories = len(categories) >= 2
 
-    # Sort by score descending
+        if score >= min_score and (strong_alone or enough_categories):
+            candidates.append((pkg, score, reasons, evidence))
+
     candidates.sort(key=lambda x: x[1], reverse=True)
     return candidates
 
@@ -179,7 +193,6 @@ def adopt(min_score: int = 5, dry_run: bool = False, assume_yes: bool = False):
     print("   ╰──────────────────────────────────────────────────╯")
     print()
 
-    # Phase 1: Scan
     print("   [1/3] Scanning filesystem...")
     system_libs = scan_shared_libraries()
     system_bins = scan_binaries()
@@ -191,7 +204,6 @@ def adopt(min_score: int = 5, dry_run: bool = False, assume_yes: bool = False):
     print(f"         Found {len(system_pcs)} pkgconfig files")
     print(f"         Found {len(system_includes)} include directories")
 
-    # Phase 2: Match
     print("\n   [2/3] Matching against SyncDB...")
     candidates = match_packages(sync_db, local_db,
                                 system_libs, system_bins,
@@ -204,8 +216,7 @@ def adopt(min_score: int = 5, dry_run: bool = False, assume_yes: bool = False):
 
     print(f"         Detected {len(candidates)} packages already on system\n")
 
-    # Show what we found
-    for pkg, score, reasons in candidates[:20]:
+    for pkg, score, reasons, evidence in candidates[:20]:
         reason_str = ", ".join(reasons[:2])
         print(f"      + {pkg.name:<35} (score: {score:>2}, {reason_str})")
 
@@ -214,7 +225,6 @@ def adopt(min_score: int = 5, dry_run: bool = False, assume_yes: bool = False):
 
     print()
 
-    # Phase 3: Register
     if not assume_yes:
         reply = input(f"   Continue with adopting {len(candidates)} packages? [y/N]: ").strip().lower()
         if reply not in ("y", "yes"):
@@ -224,25 +234,50 @@ def adopt(min_score: int = 5, dry_run: bool = False, assume_yes: bool = False):
     print(f"   [3/3] Registering {len(candidates)} packages into LocalDB...")
 
     adopted = 0
-    for pkg, score, reasons in candidates:
+    unverified = 0
+    for pkg, score, reasons, evidence in candidates:
         try:
-            # Use the version from SyncDB as a reference
-            # Mark as "BLFS-LOCAL" to distinguish from Sven-managed installs
+            # Cross-check against a live --version probe when the package
+            # itself is a binary we found (pkg.name in system_bins). If that
+            # succeeds we have a REAL, freshly-detected version. Otherwise we
+            # fall back to the SyncDB version, but mark it unverified since
+            # we matched this package heuristically — we can't be certain
+            # the on-disk build is exactly that version.
+            real_version = None
+            if pkg.name in system_bins:
+                real_version = generic_probe(pkg.name)
+
+            if real_version:
+                version = real_version
+                verified = True
+                note = "Auto-discovered from BLFS build (version confirmed via --version probe)"
+            else:
+                version = pkg.version
+                verified = False
+                note = ("Auto-discovered from BLFS build (version inferred from package "
+                        "match — not independently confirmed on this system)")
+                unverified += 1
+
             local_pkg = Package(
                 name=pkg.name,
-                version=f"BLFS-{pkg.version}" if not pkg.version.startswith("BLFS") else pkg.version,
-                desc=pkg.desc or f"Auto-discovered from BLFS build",
+                version=version,
+                version_verified=verified,
+                desc=note,
                 url=pkg.url or "",
                 provides=pkg.provides,
-                origin="explicit",
+                origin="local",
             )
             if not dry_run:
-                local_db.register(local_pkg, files=[], explicit=True)
+                local_db.register(local_pkg, files=sorted(evidence), explicit=True)
             adopted += 1
         except Exception as e:
             print(f"      ⚠ Failed to adopt {pkg.name}: {e}")
 
     print(f"\n   ✓ Adoption complete. Registered {adopted} packages.")
+    if unverified:
+        print(f"   ⚠ {unverified} package(s) registered with an unverified version "
+              f"(matched heuristically, not confirmed via --version). Version-constraint "
+              f"checks involving them will be skipped, not silently wrong.")
     if dry_run:
         print("   ✓ Dry-run mode: LocalDB was not modified.")
     print(f"   ✓ Sven now recognizes your full BLFS system.")

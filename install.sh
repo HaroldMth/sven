@@ -91,9 +91,11 @@ step() {
 vtime() {
   local start="$SECONDS"
   "$@"
+  local status=$?
   if [ "$VERBOSE" -eq 1 ]; then
     echo -e "${DIM}    (step took $((SECONDS - start))s)${NC}"
   fi
+  return "$status"
 }
 
 if [ "$VERBOSE" -eq 1 ]; then
@@ -130,7 +132,7 @@ if [ "$VERBOSE" -eq 1 ]; then
 fi
 
 step 1 "Checking prerequisites"
-REQUIRED=(python3 tar zstd gpg git fakeroot sudo)
+REQUIRED=(python3 tar zstd gpg git fakeroot)
 MISSING=()
 for t in "${REQUIRED[@]}"; do
   if command -v "$t" &>/dev/null; then
@@ -278,7 +280,22 @@ if ! "$BINARY_DST" --version >/dev/null 2>&1; then
 fi
 ok "Installed → $BINARY_DST"
 
-step 4 "Seven OS adoption (optional)"
+step 4 "Synchronizing package databases"
+SYNC_OK=1
+if [ "$NO_SYNC" -eq 1 ]; then
+  info "Skipping database sync (--no-sync). Run ${BOLD}sven sync${NC} when you are online."
+  SYNC_OK=0
+else
+  info "Refreshing package databases (sven sync)…"
+  if vtime sven sync; then
+    ok "Databases synchronized."
+  else
+    SYNC_OK=0
+    warn "Sync failed — check the network and run: sven sync"
+  fi
+fi
+
+step 5 "Seven OS adoption (optional)"
 if [ "$SKIP_ADOPT" -eq 1 ]; then
   info "Skipping adoption scripts (--skip-adopt)."
 elif [ "$HAS_REQUESTS" -eq 0 ]; then
@@ -287,9 +304,17 @@ elif [ -f "$ADOPT_DIR/adopt_lfs.py" ]; then
   if [ "$VERBOSE" -eq 1 ]; then
     info "PYTHONPATH=$REPO_ROOT python3 $ADOPT_DIR/adopt_lfs.py"
   fi
+  # adopt_lfs.py only registers protected base packages — no sync data needed.
   vtime env PYTHONPATH="$REPO_ROOT" python3 "$ADOPT_DIR/adopt_lfs.py"
+
   if [ -f "$ADOPT_DIR/adopt_blfs.py" ]; then
-    vtime env PYTHONPATH="$REPO_ROOT" python3 "$ADOPT_DIR/adopt_blfs.py" -y
+    if [ "$SYNC_OK" -eq 1 ]; then
+      # adopt_blfs.py matches against the SyncDB, so it can only run
+      # after a successful sync — running it earlier always crashes.
+      vtime env PYTHONPATH="$REPO_ROOT" python3 "$ADOPT_DIR/adopt_blfs.py" -y
+    else
+      warn "Skipping BLFS auto-discovery — it requires synced databases. Run: sven sync && python3 $ADOPT_DIR/adopt_blfs.py -y"
+    fi
   fi
   ok "Adoption scripts finished."
 else
@@ -297,14 +322,6 @@ else
   if [ "$VERBOSE" -eq 0 ]; then
     echo -e "      ${DIM}You can adopt the base system later with your usual workflow.${NC}"
   fi
-fi
-
-step 5 "Finishing up"
-if [ "$NO_SYNC" -eq 1 ]; then
-  info "Skipping database sync (--no-sync). Run ${BOLD}sven sync${NC} when you are online."
-else
-  info "Refreshing package databases (sven sync)…"
-  vtime sven sync || warn "Sync failed — check the network and run: sven sync"
 fi
 
 echo ""
