@@ -88,6 +88,7 @@ class Config:
         self._path   = config_path
         self._parser = configparser.ConfigParser()
         self._created_on_load = False
+        self.dry_run = False  # runtime flag, set from --dry-run; not persisted to disk
         self._load()
 
     # ── Load ─────────────────────────────────────────────────

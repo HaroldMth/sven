@@ -247,6 +247,7 @@ def main():
     config = get_config()
     if args.root:
         config.install_root = args.root
+    config.dry_run = bool(getattr(args, "dry_run", False))
 
     if args.command is None:
         if not (hasattr(args, "no_color") and args.no_color):

@@ -140,7 +140,38 @@ class SyncDB:
                 print(f"   ✗ {repo}.db failed: {e}")
                 results[repo] = False
 
+        self._write_sync_state(results)
         return results
+
+    def _write_sync_state(self, results: dict[str, bool]):
+        """Record when sync last ran and whether it succeeded, for cheap
+        status reads elsewhere (e.g. the command banner) without having
+        to touch the network or re-parse the full DB."""
+        import json
+        state_file = self.db_path / ".sync_state.json"
+        state = {
+            "timestamp": time.time(),
+            "results": results,
+            "ok": any(results.values()) if results else False,
+        }
+        try:
+            with open(state_file, "w") as f:
+                json.dump(state, f)
+        except OSError:
+            pass  # status display is best-effort, never block a real sync on this
+
+    @staticmethod
+    def read_sync_state(db_path: Optional[Path] = None) -> Optional[dict]:
+        """Read the last-sync state without touching the network. Returns
+        None if sync has never run. Used by the banner/doctor for a quick
+        freshness read."""
+        import json
+        path = (db_path or Path(DB_SYNC)) / ".sync_state.json"
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
 
     def _download_db(self, url: str, dest: Path, repo: str):
         """Download a single .db file with progress."""

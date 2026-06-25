@@ -139,12 +139,9 @@ def run(
 
 def _run_simulation():
     """Exact CLI simulation execution for demonstration with premium animated widgets."""
-    from ..constants import VERSION
-    from ..ui import Spinner, ProgressBar
+    from ..ui import Spinner, ProgressBar, print_banner
 
-    print("╔══════════════════════════════════════════════════╗")
-    print(f"║   Sven v{VERSION}  ·  Seven OS  ·  by HANS TECH      ║")
-    print("╚══════════════════════════════════════════════════╝")
+    print_banner()
     print("")
 
     # ── Database Sync ──
