@@ -15,14 +15,14 @@ from ..exceptions import DependencyNotFoundError, VersionConstraintError
 from ..libsven import parse_dep, dep_satisfied, vercmp
 
 # Soname ABI version constraints come in two forms:
-#   • "=6-64" / "=0-32"  — SONAME major-minor (libfoo.so=X-Y), pacman style
-#   • "=4.0"  / "=8"     — bare pkgver with no pkgrel component (libnettle.so=4.0)
+#   • "=6-64" / "=0.11-64" — SONAME major-minor (libfoo.so=X-Y), pacman style
+#   • "=4.0"  / "=8"       — bare pkgver with no pkgrel component (libnettle.so=4.0)
 # Both live in a completely different namespace from full pacman package
 # versions (e.g. "4.0-1") and will never compare equal under vercmp even
 # when the installed package genuinely satisfies the dependency.
 # Detection: req_ver is purely numeric/dotted with no "-" while pkg.version
 # has a pkgrel ("-" present), OR req_ver matches the classic X-Y soname form.
-_SONAME_VER_RE = re.compile(r'^\d{1,4}-\d{1,4}$')
+_SONAME_VER_RE = re.compile(r'^[\d.]+(?:-64|-32)$')
 _BARE_VER_RE   = re.compile(r'^[\d.]+$')   # e.g. "4.0", "8", "1.6.2"
 
 

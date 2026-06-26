@@ -135,6 +135,32 @@ class TestResolver(unittest.TestCase):
         self.assertIn("gst-plugins-base-libs", graph.nodes)
         self.assertEqual(graph.nodes["gst-plugins-base-libs"].version, "1.28.4-2")
 
+    def test_dotted_soname_constraint(self):
+        sync_db = MagicMock()
+        aur_db = MagicMock()
+        local_db = MagicMock()
+
+        installed_pkg = Package(name="libjxl", version="0.11.2-2", repo="extra", origin="official")
+        local_db.get.side_effect = lambda n: installed_pkg if n == "libjxl" else None
+
+        # Suppose another package has a dependency on libjxl=0.11-64 (soname)
+        target_pkg = Package(name="some-app", version="1.0-1", repo="extra", origin="official", deps=["libjxl=0.11-64"])
+
+        def sync_get(n):
+            if n == "some-app":
+                return target_pkg
+            return None
+
+        sync_db.get.side_effect = sync_get
+        aur_db.info.return_value = None
+
+        graph = DependencyGraph(sync_db, aur_db, local_db)
+        # Should not raise VersionConstraintError, but instead add libjxl to placeholder_packages and verify successfully.
+        graph.add_package("some-app")
+
+        self.assertIn("some-app", graph.nodes)
+        self.assertIn("libjxl", graph.placeholder_packages)
+
     # ── Sorter Tests ─────────────────────────────────────────────
 
     def test_topological_sort(self):
