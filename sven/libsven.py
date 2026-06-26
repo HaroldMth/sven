@@ -246,9 +246,13 @@ def dep_satisfied(installed_ver: str, op: str, req_ver: str) -> bool:
     E.g. dep_satisfied("5.2", ">=", "5.0") → True
     """
     # If the required constraint has no pkgrel component (no '-'), but the candidate
-    # version does, strip the pkgrel component for comparison.
+    # version does, strip the pkgrel component for comparison — but ONLY when the
+    # pkgver portion (before the last '-') exactly equals req_ver. This prevents false
+    # matches for constraints like glibc=2.43+r22+g8362e8 when installed is 2.43-1.
     if "-" not in req_ver and "-" in installed_ver:
-        installed_ver = installed_ver.rsplit("-", 1)[0]
+        pkgver = installed_ver.rsplit("-", 1)[0]
+        if pkgver == req_ver:
+            installed_ver = pkgver
 
     if _lib:
         r = _lib.sven_dep_satisfied(
