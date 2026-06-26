@@ -99,7 +99,7 @@ class DependencyGraph:
         if installed and required_by is not None and not resolved_pkg:
             if op and req_ver:
                 try:
-                    self._check_version(installed, op, req_ver)
+                    self._check_version(installed, op, req_ver, raise_on_fail=True)
                     return
                 except VersionConstraintError:
                     pass
@@ -149,7 +149,7 @@ class DependencyGraph:
         if pkg.optdeps:
             self.optdeps[name] = pkg.optdeps
 
-    def _check_version(self, pkg: Package, op: str, req_ver: str):
+    def _check_version(self, pkg: Package, op: str, req_ver: str, raise_on_fail: bool = False):
         """Verify installed version satisfies constraint using C sven_dep_satisfied.
 
         Packages with unverified, BLFS/LFS-placeholder, or soname-ABI-style
@@ -184,7 +184,10 @@ class DependencyGraph:
             if _BARE_VER_RE.match(req_ver) and "-" in pkg.version:
                 self.placeholder_packages.add(pkg.name)
                 return
-        raise VersionConstraintError(pkg.name, f"{op}{req_ver}", pkg.version)
+        if raise_on_fail:
+            raise VersionConstraintError(pkg.name, f"{op}{req_ver}", pkg.version)
+        # Fall back to installing the latest package: log a warning instead of crashing
+        self.placeholder_packages.add(pkg.name)
 
     def warn_placeholder_packages(self) -> None:
         """
@@ -250,7 +253,7 @@ class DependencyGraph:
         if installed:
             if op and req_ver:
                 try:
-                    self._check_version(installed, op, req_ver)
+                    self._check_version(installed, op, req_ver, raise_on_fail=True)
                     return dep_str, None
                 except VersionConstraintError:
                     pass

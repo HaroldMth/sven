@@ -245,6 +245,11 @@ def dep_satisfied(installed_ver: str, op: str, req_ver: str) -> bool:
     Check whether installed_ver satisfies the constraint op+req_ver.
     E.g. dep_satisfied("5.2", ">=", "5.0") → True
     """
+    # If the required constraint has no pkgrel component (no '-'), but the candidate
+    # version does, strip the pkgrel component for comparison.
+    if "-" not in req_ver and "-" in installed_ver:
+        installed_ver = installed_ver.rsplit("-", 1)[0]
+
     if _lib:
         r = _lib.sven_dep_satisfied(
             installed_ver.encode(), op.encode(), req_ver.encode()

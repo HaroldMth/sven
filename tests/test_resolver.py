@@ -161,6 +161,40 @@ class TestResolver(unittest.TestCase):
         self.assertIn("some-app", graph.nodes)
         self.assertIn("libjxl", graph.placeholder_packages)
 
+    def test_pkgrel_constraint_matching(self):
+        from sven.libsven import dep_satisfied
+        self.assertTrue(dep_satisfied("3.0.23_2-9", "=", "3.0.23_2"))
+        self.assertTrue(dep_satisfied("3.0.23_2-9", ">=", "3.0.23_2"))
+        self.assertTrue(dep_satisfied("1.0-1", "<=", "1.0"))
+
+    def test_mismatch_fallback_to_latest(self):
+        sync_db = MagicMock()
+        aur_db = MagicMock()
+        local_db = MagicMock()
+
+        installed_pkg = Package(name="outdated-lib", version="4.8-1", repo="extra", origin="official")
+        local_db.get.side_effect = lambda n: installed_pkg if n == "outdated-lib" else None
+
+        # A constraint requires a newer version >=5.0, but only 4.8 is installed (and sync DB has no newer version)
+        target_pkg = Package(name="some-app", version="1.0-1", repo="extra", origin="official", deps=["outdated-lib>=5.0"])
+
+        def sync_get(n):
+            if n == "some-app":
+                return target_pkg
+            if n == "outdated-lib":
+                return installed_pkg
+            return None
+
+        sync_db.get.side_effect = sync_get
+        aur_db.info.return_value = None
+
+        graph = DependencyGraph(sync_db, aur_db, local_db)
+        # Should not raise VersionConstraintError, but instead add outdated-lib to placeholder_packages to warn and continue.
+        graph.add_package("some-app")
+
+        self.assertIn("some-app", graph.nodes)
+        self.assertIn("outdated-lib", graph.placeholder_packages)
+
     # ── Sorter Tests ─────────────────────────────────────────────
 
     def test_topological_sort(self):

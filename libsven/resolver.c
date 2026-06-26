@@ -143,7 +143,25 @@ int sven_dep_satisfied(const char *installed_ver, const char *op, const char *re
 {
     if (!installed_ver || !op || !req_ver) return -1;
 
-    int cmp = sven_vercmp(installed_ver, req_ver);
+    char *inst_copy = NULL;
+    const char *inst_to_compare = installed_ver;
+
+    /* If req_ver has no pkgrel component (no '-'), but installed_ver does,
+     * strip the pkgrel part from installed_ver for the comparison. */
+    if (!strchr(req_ver, '-') && strchr(installed_ver, '-')) {
+        inst_copy = strdup(installed_ver);
+        char *last_dash = strrchr(inst_copy, '-');
+        if (last_dash) {
+            *last_dash = '\0';
+        }
+        inst_to_compare = inst_copy;
+    }
+
+    int cmp = sven_vercmp(inst_to_compare, req_ver);
+
+    if (inst_copy) {
+        free(inst_copy);
+    }
 
     if (op[0] == '>' && op[1] == '=') return (cmp >= 0) ? 1 : 0;
     if (op[0] == '<' && op[1] == '=') return (cmp <= 0) ? 1 : 0;
