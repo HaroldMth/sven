@@ -79,6 +79,77 @@ class TestCountUpgradable(unittest.TestCase):
         result = self.db.count_upgradable(sync_db=fake)
         self.assertEqual(result, 0, "AUR packages need network to check — must be skipped, not silently wrong")
 
+    def test_legacy_blfs_placeholder_excluded_even_when_verified_true(self):
+        """
+        Legacy entries registered before version_verified existed default to
+        True even though their version string is an old "BLFS-x.y" placeholder,
+        not a real version. Comparing that against a real sync version with
+        vercmp produces a meaningless result and silently inflates the count.
+        """
+        legacy_pkg = Package(name="systemd-libs", version="BLFS-260.1-2", origin="local")
+        self.assertTrue(legacy_pkg.version_verified, "default must be True to reproduce the real bug")
+        self.db.register(legacy_pkg, files=[])
+        fake = FakeSyncDB(loaded=True, packages={"systemd-libs": Package(name="systemd-libs", version="260.1-2")})
+        result = self.db.count_upgradable(sync_db=fake)
+        self.assertEqual(result, 0, "BLFS-/LFS- placeholder versions must never be compared, verified flag or not")
+
+
+class TestSyncStatusFallback(unittest.TestCase):
+    """
+    .sync_state.json is new — a pre-existing system synced under an older
+    Sven build has real, loadable .db files with no timestamp marker at all.
+    The freshness label must not claim "never synced" in that case; doing so
+    directly contradicts a banner that simultaneously shows a real upgrade
+    count computed from that same "nonexistent" data.
+    """
+
+    def setUp(self):
+        import shutil
+        shutil.rmtree("/tmp/test_sync_fallback", ignore_errors=True)
+        os.makedirs("/tmp/test_sync_fallback/sync")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree("/tmp/test_sync_fallback", ignore_errors=True)
+
+    def test_no_state_file_but_real_db_present_is_not_never_synced(self):
+        from pathlib import Path
+        from sven.db.sync_db import SyncDB
+        from sven.ui.output import _sync_status
+
+        open("/tmp/test_sync_fallback/sync/core.db", "w").close()
+
+        orig_init = SyncDB.__init__
+        def patched_init(self, *a, **kw):
+            orig_init(self, *a, **kw)
+            self.db_path = Path("/tmp/test_sync_fallback/sync")
+        SyncDB.__init__ = patched_init
+        SyncDB.read_sync_state = staticmethod(lambda db_path=None: None)
+
+        try:
+            _, label = _sync_status()
+            self.assertNotEqual(label, "never synced")
+        finally:
+            SyncDB.__init__ = orig_init
+
+    def test_no_state_file_and_no_db_is_genuinely_never_synced(self):
+        from pathlib import Path
+        from sven.db.sync_db import SyncDB
+        from sven.ui.output import _sync_status
+
+        orig_init = SyncDB.__init__
+        def patched_init(self, *a, **kw):
+            orig_init(self, *a, **kw)
+            self.db_path = Path("/tmp/test_sync_fallback/sync")  # empty dir, no .db files
+        SyncDB.__init__ = patched_init
+        SyncDB.read_sync_state = staticmethod(lambda db_path=None: None)
+
+        try:
+            _, label = _sync_status()
+            self.assertEqual(label, "never synced")
+        finally:
+            SyncDB.__init__ = orig_init
+
 
 if __name__ == "__main__":
     unittest.main()

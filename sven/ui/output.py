@@ -32,16 +32,26 @@ def _sync_status() -> tuple[str, str]:
     except Exception:
         state = None
 
-    if state is None:
+    if state is not None:
+        if not state.get("ok", False):
+            return ("\033[1;31m", "sync failed")
+        elapsed = __import__("time").time() - state.get("timestamp", 0)
+        label = f"synced {_format_elapsed(elapsed)}"
+        color = "\033[1;32m" if elapsed < 86400 else "\033[1;33m"
+        return (color, label)
+
+    # No .sync_state.json yet — this file is new; a pre-existing system
+    # synced under an older Sven build will have real, loadable .db files
+    # with no timestamp marker at all. Don't claim "never synced" when
+    # there's clearly usable data sitting right there — that's the same
+    # kind of false-confidence-in-the-wrong-direction bug as claiming
+    # success on failure, just inverted. Fall back to a real check.
+    try:
+        from ..db.sync_db import SyncDB
+        SyncDB()._ensure_loaded()
+        return ("\033[1;33m", "synced (date unknown)")
+    except Exception:
         return ("\033[1;33m", "never synced")
-
-    if not state.get("ok", False):
-        return ("\033[1;31m", "sync failed")
-
-    elapsed = __import__("time").time() - state.get("timestamp", 0)
-    label = f"synced {_format_elapsed(elapsed)}"
-    color = "\033[1;32m" if elapsed < 86400 else "\033[1;33m"
-    return (color, label)
 
 
 def _disk_free_label(path: str) -> str:

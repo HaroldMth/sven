@@ -236,6 +236,13 @@ class LocalDB:
         for pkg in self.all_packages():
             if pkg.origin == "aur" or not pkg.version_verified:
                 continue  # AUR needs network; unverified versions can't compare meaningfully
+            if pkg.version.startswith(("BLFS-", "LFS-")):
+                # Legacy adoption placeholder — registered before version_verified
+                # existed, so it defaults True even though the string isn't a
+                # real comparable version. Same exclusion graph.py's
+                # _check_version applies; the two must agree or the banner's
+                # estimate and the real resolver disagree on the same package.
+                continue
             latest = sync_db.get(pkg.name)
             if latest is None:
                 continue
