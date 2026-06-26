@@ -137,6 +137,17 @@ class DependencyGraph:
                 f"without a confirmed version; reinstall via Sven to get full version tracking."
             )
             return
+        # BLFS/LFS adopted packages carry placeholder versions like "BLFS-260.1-2"
+        # or "LFS-BASE" that are incomparable to Arch/soname version constraints.
+        # Treat them as unverified so they don't block dependency resolution.
+        if pkg.version.startswith(("BLFS-", "LFS-")):
+            from ..ui.output import print_warning
+            print_warning(
+                f"{pkg.name}: BLFS/LFS placeholder version ({pkg.version!r}) — "
+                f"skipping check against {op}{req_ver}. "
+                f"Reinstall via Sven for accurate version tracking."
+            )
+            return
         if not dep_satisfied(pkg.version, op, req_ver):
             raise VersionConstraintError(pkg.name, f"{op}{req_ver}", pkg.version)
 
