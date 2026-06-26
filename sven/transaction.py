@@ -232,6 +232,7 @@ class InstallTransaction(Transaction):
                 graph.add_package(target)
 
         install_order = sort_dependencies(graph.nodes, graph.edges)
+        graph.warn_placeholder_packages()
 
         installed = self.local_db.list_installed()
         if not force_reinstall:
@@ -307,6 +308,7 @@ class InstallTransaction(Transaction):
                 graph.add_package(target)
             
             install_order = sort_dependencies(graph.nodes, graph.edges)
+            graph.warn_placeholder_packages()
 
             if not force_reinstall:
                 final_order = []

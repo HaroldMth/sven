@@ -4,6 +4,7 @@
 #  resolver/graph.py — dependency graph builder
 # ============================================================
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional, Set, Dict, List
 from ..db.models import Package
@@ -12,6 +13,13 @@ from ..db.aur_db import AURDB
 from ..db.local_db import LocalDB
 from ..exceptions import DependencyNotFoundError, VersionConstraintError
 from ..libsven import parse_dep, dep_satisfied, vercmp
+
+# Soname ABI version constraints look like "=6-64" or "=0-32" — small
+# major-minor numbers pacman uses for library SONAMEs (libfoo.so=X-Y).
+# They live in a completely different namespace from package versions
+# (e.g. "2.14.3-1") and will never compare equal even when the installed
+# package genuinely satisfies the dependency.
+_SONAME_VER_RE = re.compile(r'^\d{1,4}-\d{1,4}$')
 
 
 class Version:
@@ -53,6 +61,13 @@ class DependencyGraph:
         self.edges: Dict[str, Set[str]] = {}
         # Optional deps collected for reporting
         self.optdeps: Dict[str, List[str]] = {}
+
+        # Packages whose version check was skipped (unverified, BLFS/LFS
+        # placeholder, or soname-ABI constraint mismatch). Collected here
+        # instead of warning per-call so callers can print ONE consolidated
+        # summary after resolution finishes, rather than spamming duplicate
+        # warnings for every edge that references the same package.
+        self.placeholder_packages: Set[str] = set()
 
     def add_package(
         self,
@@ -126,30 +141,52 @@ class DependencyGraph:
             self.optdeps[name] = pkg.optdeps
 
     def _check_version(self, pkg: Package, op: str, req_ver: str):
-        """Verify installed version satisfies constraint using C sven_dep_satisfied."""
+        """Verify installed version satisfies constraint using C sven_dep_satisfied.
+
+        Packages with unverified, BLFS/LFS-placeholder, or soname-ABI-style
+        versions are recorded in self.placeholder_packages instead of being
+        warned about individually — the caller prints one consolidated
+        reinstall prompt after resolution finishes.
+        """
         if not op or not req_ver:
             return
         if not pkg.version_verified:
-            from ..ui.output import print_warning
-            print_warning(
-                f"{pkg.name}: version is unverified ({pkg.version!r}) — "
-                f"skipping check against {op}{req_ver}. This package was adopted "
-                f"without a confirmed version; reinstall via Sven to get full version tracking."
-            )
+            self.placeholder_packages.add(pkg.name)
             return
         # BLFS/LFS adopted packages carry placeholder versions like "BLFS-260.1-2"
         # or "LFS-BASE" that are incomparable to Arch/soname version constraints.
         # Treat them as unverified so they don't block dependency resolution.
         if pkg.version.startswith(("BLFS-", "LFS-")):
-            from ..ui.output import print_warning
-            print_warning(
-                f"{pkg.name}: BLFS/LFS placeholder version ({pkg.version!r}) — "
-                f"skipping check against {op}{req_ver}. "
-                f"Reinstall via Sven for accurate version tracking."
-            )
+            self.placeholder_packages.add(pkg.name)
             return
-        if not dep_satisfied(pkg.version, op, req_ver):
-            raise VersionConstraintError(pkg.name, f"{op}{req_ver}", pkg.version)
+        if dep_satisfied(pkg.version, op, req_ver):
+            return
+        # Soname ABI constraint (e.g. =6-64, =0-32) checked against a real
+        # package version (e.g. 2.14.3-1) — different versioning namespaces,
+        # never directly comparable. Skip rather than raise.
+        if op == "=" and _SONAME_VER_RE.match(req_ver):
+            self.placeholder_packages.add(pkg.name)
+            return
+        raise VersionConstraintError(pkg.name, f"{op}{req_ver}", pkg.version)
+
+    def warn_placeholder_packages(self) -> None:
+        """
+        Print ONE consolidated warning for every package that skipped a strict
+        version check during resolution (unverified, BLFS/LFS, or soname-ABI
+        mismatch) — instead of warning once per dependency edge that touches
+        the same package.
+        """
+        if not self.placeholder_packages:
+            return
+        from ..ui.output import print_warning
+        names = ", ".join(sorted(self.placeholder_packages))
+        count = len(self.placeholder_packages)
+        plural = "package" if count == 1 else "packages"
+        print_warning(
+            f"{count} {plural} skipped strict version checks (unverified / "
+            f"BLFS-LFS / soname-ABI mismatch): {names}. "
+            f"Reinstall {'it' if count == 1 else 'them'} via Sven for precise package tracking."
+        )
 
     def _resolve_package(
         self,
