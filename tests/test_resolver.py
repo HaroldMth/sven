@@ -104,6 +104,37 @@ class TestResolver(unittest.TestCase):
         self.assertIn("bash", graph.nodes)
         self.assertIn("readline", graph.edges["bash"])
 
+    def test_dependency_upgrade_fallback(self):
+        sync_db = MagicMock()
+        aur_db = MagicMock()
+        local_db = MagicMock()
+
+        # Installed package has an older version that does not satisfy the constraint
+        installed_dep = Package(name="gst-plugins-base-libs", version="1.28.3-1", repo="extra", origin="official")
+        local_db.get.side_effect = lambda n: installed_dep if n == "gst-plugins-base-libs" else None
+
+        # Sync DB has the newer package version that satisfies the constraint
+        upgraded_dep = Package(name="gst-plugins-base-libs", version="1.28.4-2", repo="extra", origin="official")
+        target_pkg = Package(name="gst-plugins-bad", version="1.28.4-2", repo="extra", origin="official", deps=["gst-plugins-base-libs=1.28.4-2"])
+
+        def sync_get(n):
+            if n == "gst-plugins-bad":
+                return target_pkg
+            elif n == "gst-plugins-base-libs":
+                return upgraded_dep
+            return None
+
+        sync_db.get.side_effect = sync_get
+        aur_db.info.return_value = None
+
+        graph = DependencyGraph(sync_db, aur_db, local_db)
+        # Should not raise VersionConstraintError, but instead fall back to sync DB and upgrade
+        graph.add_package("gst-plugins-bad")
+
+        self.assertIn("gst-plugins-bad", graph.nodes)
+        self.assertIn("gst-plugins-base-libs", graph.nodes)
+        self.assertEqual(graph.nodes["gst-plugins-base-libs"].version, "1.28.4-2")
+
     # ── Sorter Tests ─────────────────────────────────────────────
 
     def test_topological_sort(self):

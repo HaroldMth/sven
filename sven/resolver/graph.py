@@ -96,10 +96,15 @@ class DependencyGraph:
         # If it's installed AND it is just a dependency (required_by is not None),
         # we skip adding it to the graph. If it's a top-level target (required_by is None),
         # we must add it so InstallTransaction can evaluate if it needs an upgrade.
-        if installed and required_by is not None:
+        if installed and required_by is not None and not resolved_pkg:
             if op and req_ver:
-                self._check_version(installed, op, req_ver)
-            return
+                try:
+                    self._check_version(installed, op, req_ver)
+                    return
+                except VersionConstraintError:
+                    pass
+            else:
+                return
 
         pkg = resolved_pkg or self._resolve_package(name, op, req_ver, required_by)
 
@@ -244,8 +249,13 @@ class DependencyGraph:
         installed = self.local_db.get(dep_name)
         if installed:
             if op and req_ver:
-                self._check_version(installed, op, req_ver)
-            return dep_str, None
+                try:
+                    self._check_version(installed, op, req_ver)
+                    return dep_str, None
+                except VersionConstraintError:
+                    pass
+            else:
+                return dep_str, None
 
         return dep_str, self._resolve_package(dep_name, op, req_ver, required_by)
 
