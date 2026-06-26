@@ -14,12 +14,16 @@ from ..db.local_db import LocalDB
 from ..exceptions import DependencyNotFoundError, VersionConstraintError
 from ..libsven import parse_dep, dep_satisfied, vercmp
 
-# Soname ABI version constraints look like "=6-64" or "=0-32" — small
-# major-minor numbers pacman uses for library SONAMEs (libfoo.so=X-Y).
-# They live in a completely different namespace from package versions
-# (e.g. "2.14.3-1") and will never compare equal even when the installed
-# package genuinely satisfies the dependency.
+# Soname ABI version constraints come in two forms:
+#   • "=6-64" / "=0-32"  — SONAME major-minor (libfoo.so=X-Y), pacman style
+#   • "=4.0"  / "=8"     — bare pkgver with no pkgrel component (libnettle.so=4.0)
+# Both live in a completely different namespace from full pacman package
+# versions (e.g. "4.0-1") and will never compare equal under vercmp even
+# when the installed package genuinely satisfies the dependency.
+# Detection: req_ver is purely numeric/dotted with no "-" while pkg.version
+# has a pkgrel ("-" present), OR req_ver matches the classic X-Y soname form.
 _SONAME_VER_RE = re.compile(r'^\d{1,4}-\d{1,4}$')
+_BARE_VER_RE   = re.compile(r'^[\d.]+$')   # e.g. "4.0", "8", "1.6.2"
 
 
 class Version:
@@ -161,12 +165,20 @@ class DependencyGraph:
             return
         if dep_satisfied(pkg.version, op, req_ver):
             return
-        # Soname ABI constraint (e.g. =6-64, =0-32) checked against a real
-        # package version (e.g. 2.14.3-1) — different versioning namespaces,
-        # never directly comparable. Skip rather than raise.
-        if op == "=" and _SONAME_VER_RE.match(req_ver):
-            self.placeholder_packages.add(pkg.name)
-            return
+        # Soname ABI constraint checked against a full pkgver-pkgrel string —
+        # different versioning namespaces, never directly comparable.
+        # Two known soname forms:
+        #   X-Y  (e.g. =6-64, =0-32)  — classic pacman SONAME major-minor
+        #   X.Y  (e.g. =4.0, =8)      — bare pkgver without pkgrel component
+        # The second form is detected when req_ver is purely numeric/dotted
+        # (no "-") while the installed version carries a pkgrel ("-" present).
+        if op == "=":
+            if _SONAME_VER_RE.match(req_ver):
+                self.placeholder_packages.add(pkg.name)
+                return
+            if _BARE_VER_RE.match(req_ver) and "-" in pkg.version:
+                self.placeholder_packages.add(pkg.name)
+                return
         raise VersionConstraintError(pkg.name, f"{op}{req_ver}", pkg.version)
 
     def warn_placeholder_packages(self) -> None:
