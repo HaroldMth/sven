@@ -8,7 +8,7 @@ from ..db.sync_db import SyncDB
 from ..ui import print_banner, print_section, print_success, print_warning, print_error
 from . import upgrade
 
-def run():
+def run(skip_aur: bool = False):
     print_banner()
     print_section("Syncing database catalogs...")
 
@@ -33,4 +33,4 @@ def run():
 
     # Trigger upgrade implicitly like `pacman -Syu`, but only against
     # databases that actually synced — never upgrade against stale/missing data.
-    upgrade.run()
+    upgrade.run(skip_aur=skip_aur)

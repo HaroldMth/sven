@@ -601,6 +601,7 @@ class UpgradeTransaction(InstallTransaction):
         force_protected: bool = False,
         force_reinstall: bool = False,
         version: str = None,
+        skip_aur: bool = False,
     ) -> list:
         print("\n   [Upgrade] Synchronizing local catalog with mirrors...")
         
@@ -624,13 +625,20 @@ class UpgradeTransaction(InstallTransaction):
             else:
                 aur_check_list.append(pkg_name)
 
+        self.skipped_aur_count = 0
         if aur_check_list:
-            print("   [Upgrade] Checking AUR for updates...")
-            aur_pkgs = self.aur_db.info_multi(aur_check_list)
-            for remote_pkg in aur_pkgs:
-                local_pkg = self.local_db.get(remote_pkg.name)
-                if local_pkg and remote_pkg.version != local_pkg.version:
-                    to_upgrade.append(remote_pkg.name)
+            if skip_aur:
+                # Honest about what got skipped, not just silent — these
+                # packages are simply not checked at all this run, so an
+                # available AUR update for them won't be reflected below.
+                self.skipped_aur_count = len(aur_check_list)
+            else:
+                print("   [Upgrade] Checking AUR for updates...")
+                aur_pkgs = self.aur_db.info_multi(aur_check_list)
+                for remote_pkg in aur_pkgs:
+                    local_pkg = self.local_db.get(remote_pkg.name)
+                    if local_pkg and remote_pkg.version != local_pkg.version:
+                        to_upgrade.append(remote_pkg.name)
                 
         if not to_upgrade:
             return []

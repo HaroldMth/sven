@@ -82,7 +82,9 @@ required Python modules are present. Run it any time something feels off.
 | `sven install <pkg> --version <ver>` | Install a specific available version |
 | `sven remove <pkg...>` | Remove packages |
 | `sven upgrade` | Upgrade all installed packages |
+| `sven upgrade --skip-aur` | Upgrade without checking AUR — skips the network round-trip to the AUR RPC for every installed AUR package |
 | `sven update` | Sync databases, then upgrade (like `pacman -Syu`) |
+| `sven update --skip-aur` | Same, but skip the AUR check too |
 | `sven sync` | Refresh package databases only |
 | `sven search <query>` | Search official repos + AUR |
 | `sven info <pkg>` | Show package metadata |

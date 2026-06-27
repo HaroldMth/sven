@@ -42,6 +42,7 @@ class MultiProgressDisplay:
         window_size: int = 12,
         verbose: bool = False,
         shared_lock: Optional[threading.Lock] = None,
+        known_sizes: Optional[Dict[str, int]] = None,
     ):
         self.all_filenames = filenames
         self.total_count = len(filenames)
@@ -59,8 +60,14 @@ class MultiProgressDisplay:
         self._wait_set: set[str] = set()
         self._wait_buf: Dict[str, dict] = {}
 
-        # For byte-weighted global progress
-        self._file_totals: Dict[str, int] = {}
+        # For byte-weighted global progress. Seeded with every file's known
+        # size upfront (from sync DB metadata) rather than discovered
+        # incrementally as each download starts — otherwise the denominator
+        # only covers whichever subset has started so far, grows as more
+        # files get promoted from the wait queue, and the Overall percentage
+        # ends up non-monotonic even though the byte math is locally correct
+        # at each instant.
+        self._file_totals: Dict[str, int] = dict(known_sizes or {})
         self._file_downloaded: Dict[str, int] = {}
 
         self._ever_rendered = False
@@ -182,10 +189,32 @@ class MultiProgressDisplay:
             self._last_render_ts = now
             self._render()
 
+    # How long to hold a file's bar at a visible 100% before its slot gets
+    # reused. Without this, the 100% frame and the slot-replacement render
+    # happen back-to-back under the same lock with zero gap — the math is
+    # correct but no human eye ever actually catches it on screen.
+    _COMPLETE_HOLD_SECONDS = 0.12
+
     def finish_single(self, filename: str):
         with self.lock:
             if filename in self._finished:
                 return
+            if self.is_tty and filename in self.active_slots:
+                # Force this slot to visibly show 100% and render it as its
+                # own frame, before any swap happens.
+                data = self.active_slots[filename]
+                if data["tot"] > 0:
+                    data["dl"] = data["tot"]
+                    self._file_downloaded[filename] = data["tot"]
+                self._last_render_ts = time.monotonic()
+                self._render()
+
+        if self.is_tty:
+            time.sleep(self._COMPLETE_HOLD_SECONDS)
+
+        with self.lock:
+            if filename in self._finished:
+                return  # another thread already finalized it during the hold
             self._finished.add(filename)
             self.completed_count += 1
 

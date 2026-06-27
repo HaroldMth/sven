@@ -117,6 +117,7 @@ class Fetcher:
             [pkg.filename for pkg in to_download],
             verbose=verbose,
             shared_lock=ui_lock,
+            known_sizes={pkg.filename: pkg.size for pkg in to_download if pkg.size > 0},
         )
 
         if self.verbose:

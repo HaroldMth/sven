@@ -8,12 +8,20 @@ from ..transaction import UpgradeTransaction
 from ..ui import print_banner, print_section, print_success, print_error, confirm, print_info
 from ..ui.prompt import show_package_list
 
-def run(packages: list[str] = None, force_protected: bool = False, verbose: bool = False):
+def run(packages: list[str] = None, force_protected: bool = False, verbose: bool = False, skip_aur: bool = False):
     print_banner()
     print_section("Checking for upgrades...")
     
     tx = UpgradeTransaction(explicit=False, verbose=verbose)
-    resolved = tx.resolve(packages, force_protected=force_protected)
+    resolved = tx.resolve(packages, force_protected=force_protected, skip_aur=skip_aur)
+
+    skipped = getattr(tx, "skipped_aur_count", 0)
+    if skipped:
+        from ..ui import print_warning
+        print_warning(
+            f"--skip-aur: {skipped} AUR package(s) not checked — "
+            f"any available update for them won't show below."
+        )
     
     if not resolved:
         print_success("Everything is up to date.")

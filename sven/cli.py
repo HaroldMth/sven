@@ -82,10 +82,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_upgrade.add_argument("--devel", action="store_true",
                            help="Also rebuild -git AUR packages")
     p_upgrade.add_argument("--force-protected", action="store_true", help="Allow upgrading protected LFS packages")
+    p_upgrade.add_argument("--skip-aur", action="store_true",
+                           help="Don't check AUR for updates — skips the network round-trip to the AUR RPC for every installed AUR package")
 
 
     # ── update ────────────────────────────────────────────────
-    subparsers.add_parser("update", help="Sync databases + full upgrade")
+    p_update = subparsers.add_parser("update", help="Sync databases + full upgrade")
+    p_update.add_argument("--skip-aur", action="store_true",
+                          help="Don't check AUR for updates — skips the network round-trip to the AUR RPC for every installed AUR package")
 
     # ── search ────────────────────────────────────────────────
     p_search = subparsers.add_parser("search", help="Search official repos + AUR")
@@ -304,11 +308,11 @@ def main():
         )
     elif cmd == "upgrade":
         from .commands.upgrade import run
-        run(args.packages, force_protected=args.force_protected)
+        run(args.packages, force_protected=args.force_protected, skip_aur=args.skip_aur)
 
     elif cmd == "update":
         from .commands.update import run
-        run()
+        run(skip_aur=args.skip_aur)
     elif cmd == "search":
         from .commands.search import run
         run(args.query)
