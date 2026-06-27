@@ -25,11 +25,14 @@
 #  for version-constraint comparisons."
 # ============================================================
 
+import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
 from typing import Optional
+
+from .ssl_bundle import clean_subprocess_env
 
 
 _TIMEOUT = 5  # seconds — never let a probe hang the adoption run
@@ -51,6 +54,7 @@ def _run(cmd: list[str]) -> str:
             capture_output=True,
             text=True,
             timeout=_TIMEOUT,
+            env=clean_subprocess_env(os.environ.copy()),
         )
         return (r.stdout or "") + "\n" + (r.stderr or "")
     except (OSError, subprocess.SubprocessError):
@@ -336,6 +340,7 @@ def is_present(pkg_name: str) -> bool:
         r = subprocess.run(
             ["pkg-config", "--exists", pkg_name],
             capture_output=True, timeout=_TIMEOUT,
+            env=clean_subprocess_env(os.environ.copy()),
         )
         if r.returncode == 0:
             return True

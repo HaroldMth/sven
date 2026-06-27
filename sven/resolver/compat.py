@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..db.models import Package
+from ..ssl_bundle import clean_subprocess_env
 
 
 class CompatibilityLevel(Enum):
@@ -53,6 +54,7 @@ def get_host_glibc_version() -> Optional[str]:
         result = subprocess.run(
             ["ldd", "--version"],
             capture_output=True, text=True, timeout=5,
+            env=clean_subprocess_env(os.environ.copy()),
         )
         output = result.stdout or result.stderr
         # Typical output: "ldd (GNU libc) 2.38"
@@ -70,6 +72,7 @@ def get_host_glibc_version() -> Optional[str]:
                 result = subprocess.run(
                     [path],
                     capture_output=True, text=True, timeout=5,
+                    env=clean_subprocess_env(os.environ.copy()),
                 )
                 output = result.stdout or result.stderr
                 match = re.search(r"release version (\d+\.\d+)", output)
@@ -101,6 +104,7 @@ def extract_glibc_requirements(filepath: str) -> list[str]:
         result = subprocess.run(
             ["readelf", "-V", filepath],
             capture_output=True, text=True, timeout=10,
+            env=clean_subprocess_env(os.environ.copy()),
         )
         if result.returncode != 0:
             return []
@@ -123,6 +127,7 @@ def check_elf_interpreter(filepath: str) -> Optional[str]:
         result = subprocess.run(
             ["readelf", "-l", filepath],
             capture_output=True, text=True, timeout=10,
+            env=clean_subprocess_env(os.environ.copy()),
         )
         match = re.search(r"\[Requesting program interpreter: (.+?)\]", result.stdout)
         if match:

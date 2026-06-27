@@ -1,9 +1,11 @@
+import os
 import shutil
 import subprocess
 import sys
 
 from ..constants import VERSION
 from ..db.db_version import check_db_version, read_db_version
+from ..ssl_bundle import clean_subprocess_env
 from ..ui import print_banner, print_info, print_section
 
 
@@ -11,7 +13,8 @@ def _tool_version(cmd: list[str]) -> str:
     if not shutil.which(cmd[0]):
         return "not found"
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=False,
+                              env=clean_subprocess_env(os.environ.copy()))
         line = (proc.stdout or proc.stderr or "").strip().splitlines()
         return line[0] if line else "available"
     except Exception:

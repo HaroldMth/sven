@@ -16,6 +16,7 @@ from pathlib import Path
 from ..config import get_config
 from ..exceptions import HookError, HookTranslationError
 from ..security.hook_scanner import scan_file, prompt_hook_approval
+from ..ssl_bundle import clean_subprocess_env
 
 # Standard Arch auto-hooks that we manually execute
 AUTO_HOOKS = [
@@ -40,7 +41,8 @@ def run_auto_hooks(install_root: str = None):
                 cwd=root if root != "/" else None,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.STDOUT,
-                timeout=60
+                timeout=60,
+                env=clean_subprocess_env(os.environ.copy())
             )
 
         except subprocess.TimeoutExpired:
@@ -137,7 +139,7 @@ fi
         
         try:
             # Drop capabilities for AUR hooks if running as root
-            env = os.environ.copy()
+            env = clean_subprocess_env(os.environ.copy())
             cmd = [str(runner_script)]
             
             # (For safety on actual LFS, we'd use `sudo -u nobody` here if is_aur

@@ -4,9 +4,12 @@
 #  downloader/gpg.py — GPG signature verification
 # ============================================================
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
+
+from ..ssl_bundle import clean_subprocess_env
 
 from ..constants import GPG_KEYRING
 from ..exceptions import SignatureError
@@ -81,6 +84,7 @@ class GPGVerifier:
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    env=clean_subprocess_env(os.environ.copy()),
                 )
                 if result.returncode == 0:
                     print(f"   ✓ GPG signature valid: {pkg_path.name}")

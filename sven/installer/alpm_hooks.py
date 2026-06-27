@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 from ..libsven import match_path
 from ..config import get_config
+from ..ssl_bundle import clean_subprocess_env
 
 # ============================================================
 #  Sven — Seven OS Package Manager
@@ -103,7 +104,8 @@ class ALPMHookEngine:
                     cmd, 
                     stdout=subprocess.DEVNULL, 
                     stderr=subprocess.STDOUT, 
-                    timeout=120
+                    timeout=120,
+                    env=clean_subprocess_env(os.environ.copy())
                 )
             except Exception as e:
                 print(f"      ⚠ Failed to execute {h['file']}: {e}")
