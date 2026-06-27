@@ -164,10 +164,14 @@ def print_banner():
         print(f"{warn}┃ ⚠ {' · '.join(extras)}{reset}")
 
 
-def print_error_box(message: str, max_len: int = 60):
+def print_error_box(message: str, max_len: int = 60, title: str = "SVEN ERROR", show_log_hint: bool = True):
     """
     Shared crash-handler display for __main__.py and run_sven.py — single
     implementation so the two entry points can't drift from each other.
+    Also used by transaction.py's rollback-failure message (with a custom
+    title and show_log_hint=False, since that path already prints its own
+    follow-up rollback status lines), so that box doesn't drift into its
+    own separate style either.
     Callers should wrap the import of this function itself in a try/except,
     since it's invoked from top-level exception handlers that may be
     catching an error from deep inside sven's own import chain.
@@ -175,9 +179,10 @@ def print_error_box(message: str, max_len: int = 60):
     red = "\033[1;31m" if color_enabled else ""
     reset = "\033[0m" if color_enabled else ""
     truncated = message[:max_len] + ("…" if len(message) > max_len else "")
-    print(f"\n{red}┃{reset} {red}●{reset} SVEN ERROR")
+    print(f"\n{red}┃{reset} {red}●{reset} {title}")
     print(f"{red}┃{reset} {truncated}")
-    print("  Check /var/log/sven/error.log for technical details.")
+    if show_log_hint:
+        print("  Check /var/log/sven/error.log for technical details.")
 
 
 def print_section_banner(title: str):

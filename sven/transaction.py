@@ -119,10 +119,16 @@ class Transaction:
             if isinstance(e, ProtectedPackageError):
                 print(f"\n{e}\n")
             else:
-                print(f"\n   ╭{'─' * 50}╮")
-                print("   │  Install failed — restoring the pre-transaction snapshot")
-                print(f"   ╰{'─' * 50}╯")
-                print(f"   Cause: {e}")
+                try:
+                    from .ui.output import print_error_box
+                    print_error_box(
+                        str(e),
+                        title="Install failed — restoring the pre-transaction snapshot",
+                        show_log_hint=False,
+                    )
+                except Exception:
+                    print(f"\n   Install failed — restoring the pre-transaction snapshot")
+                    print(f"   Cause: {e}")
             
             if snapshot_id:
                 try:
@@ -349,6 +355,14 @@ class InstallTransaction(Transaction):
                 f"Dependency order: {len(install_order_names)} packages "
                 "(use --verbose to print the full list)"
             )
+
+        # Package-level conflicts only need declared metadata (conflicts/
+        # provides/replaces) and the local DB — nothing downloaded yet at
+        # this point. Check now, before spending any time or bandwidth on
+        # a transaction that's going to fail anyway. File-level conflicts
+        # and ABI checks genuinely need the downloaded archive, so those
+        # stay in step 4 where they already are.
+        check_conflicts(filtered_pkgs, self.local_db)
         print()
 
         # Separate official vs AUR vs Build targets
@@ -443,12 +457,8 @@ class InstallTransaction(Transaction):
             )
             print_info(f"Running checks on {len(filtered_pkgs)} package(s)...")
 
-        # Package-level conflicts
-        if self.verbose:
-            print_step("Checking package-level conflicts...")
-        check_conflicts(filtered_pkgs, self.local_db)
-        if self.verbose:
-            print_success("No package conflicts detected")
+        # Package-level conflicts were already checked before downloading
+        # (see above) — no reason to check again here.
         
         # File-level conflicts
         if self.verbose:
