@@ -174,46 +174,62 @@ class AURDB:
 
     # ── RPC ───────────────────────────────────────────────────
 
-    def _rpc(self, rpc_type: str, arg, by: str = None) -> dict:
+    def _rpc(self, rpc_type: str, arg, by: str = None, max_retries: int = 2) -> dict:
         """
         Make a raw RPC call to the AUR API.
 
         Endpoints:
           info:   /rpc/v5/info?arg[]=pkg1&arg[]=pkg2
           search: /rpc/v5/search/query?by=name-desc
+
+        Retries on transient connection/timeout failures only (not on a real
+        HTTP error response, which means the server actually answered).
+        A single dropped packet or a transient connection error on an
+        otherwise-working network shouldn't be enough to fail outright when
+        a one-second retry would likely succeed — this mirrors the retry/
+        failover behavior package downloads already get via mirror failover.
         """
-        try:
-            if rpc_type == "info":
-                # arg can be str or list
-                if isinstance(arg, list):
-                    params = [("arg[]", a) for a in arg]
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                if rpc_type == "info":
+                    # arg can be str or list
+                    if isinstance(arg, list):
+                        params = [("arg[]", a) for a in arg]
+                    else:
+                        params = {"arg": arg}
+                    url  = f"{AUR_RPC_URL}/info"
+                    resp = requests.get(url, params=params, timeout=10)
+                elif rpc_type == "search":
+                    url  = f"{AUR_RPC_URL}/search/{requests.utils.quote(arg)}"
+                    params = {}
+                    if by:
+                        params["by"] = by
+                    resp = requests.get(url, params=params, timeout=10)
                 else:
-                    params = {"arg": arg}
-                url  = f"{AUR_RPC_URL}/info"
-                resp = requests.get(url, params=params, timeout=10)
-            elif rpc_type == "search":
-                url  = f"{AUR_RPC_URL}/search/{requests.utils.quote(arg)}"
-                params = {}
-                if by:
-                    params["by"] = by
-                resp = requests.get(url, params=params, timeout=10)
-            else:
-                raise AURError(f"Unknown RPC type: {rpc_type}")
+                    raise AURError(f"Unknown RPC type: {rpc_type}")
 
-            resp.raise_for_status()
-            data = resp.json()
+                resp.raise_for_status()
+                data = resp.json()
 
-            if data.get("type") == "error":
-                raise AURError(f"AUR API error: {data.get('error')}")
+                if data.get("type") == "error":
+                    raise AURError(f"AUR API error: {data.get('error')}")
 
-            return data
+                return data
 
-        except requests.exceptions.ConnectionError:
-            raise AURError("Cannot reach AUR. Check your internet connection.")
-        except requests.exceptions.Timeout:
-            raise AURError("AUR API timed out.")
-        except requests.exceptions.HTTPError as e:
-            raise AURError(f"AUR API HTTP error: {e}")
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                last_error = e
+                if attempt < max_retries:
+                    time.sleep(1 + attempt)  # 1s, then 2s
+                    continue
+            except requests.exceptions.HTTPError as e:
+                raise AURError(f"AUR API HTTP error: {e}")
+
+        if isinstance(last_error, requests.exceptions.Timeout):
+            raise AURError(f"AUR API timed out after {max_retries + 1} attempts.")
+        raise AURError(
+            f"Cannot reach AUR after {max_retries + 1} attempts. Check your internet connection."
+        )
 
     # ── Cache ─────────────────────────────────────────────────
 
