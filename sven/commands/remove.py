@@ -110,12 +110,13 @@ def run(packages: list[str], recursive: bool = False, force_protected: bool = Fa
     for p in sven_pkgs:
         sven_pkg = LocalDB().get(p)
         if sven_pkg:
-            # Check if this was a synced-only entry (from sven sync --from-pacman)
-            entry_dir = Path("/var/lib/sven/installed") / sven_pkg.full_name / "desc"
-            if entry_dir.exists():
+            # Check if this is a synced-only entry (pacman-managed, not removable by Sven).
+            # The .sven file is the JSON sidecar — desc is ALPM key-value format, not JSON.
+            sidecar_path = Path("/var/lib/sven/installed") / sven_pkg.full_name / ".sven"
+            if sidecar_path.exists():
                 import json
                 try:
-                    data = json.loads(entry_dir.read_text(encoding="utf-8"))
+                    data = json.loads(sidecar_path.read_text(encoding="utf-8"))
                     if data.get("sven_synced_only"):
                         print_error(f"{p} was installed by pacman, not Sven.")
                         print_info(f"Use 'pacman -R {p}' to remove it.")
@@ -130,13 +131,23 @@ def run(packages: list[str], recursive: bool = False, force_protected: bool = Fa
         print_error("No Sven-managed packages to remove.")
         sys.exit(1)
 
+    # Collect versions BEFORE execute() deregisters the packages from LocalDB —
+    # get() returns None after removal, so the ALPM cleanup call would silently
+    # do nothing if we looked up versions after the transaction.
+    versions_before = {}
+    ldb = LocalDB()
+    for p in removable:
+        pkg = ldb.get(p)
+        if pkg:
+            versions_before[p] = pkg.version
+
     if tx.execute(removable, force_protected=force_protected):
         for p in removable:
             print_success(f"{p} removed successfully")
-            # Clean up ALPM mirror entry
-            sven_pkg = LocalDB().get(p)
-            if sven_pkg:
-                remove_alpm_local_entry(p, sven_pkg.version)
+            # Clean up ALPM mirror entry using the version we captured before removal
+            ver = versions_before.get(p)
+            if ver:
+                remove_alpm_local_entry(p, ver)
     else:
         print_error("Removal failed.")
         sys.exit(1)

@@ -84,10 +84,14 @@ if command -v sven >/dev/null 2>&1; then
     sven remove $SVEN_PKGS
     SVEN_EXIT=$?
     if [ $SVEN_EXIT -eq 0 ]; then
-        # Sven succeeded → abort pacman transaction (nothing left for pacman to do)
+        # Sven succeeded — abort the pacman transaction since there's nothing
+        # left for pacman to do. Exit 1 is the only way ALPM hooks can stop a
+        # transaction, but this is an intentional, successful delegation, not
+        # an error. Print a clear message so pacman's own "error: target not found"
+        # doesn't look like something went wrong.
+        echo "[sven] Removal complete. Pacman transaction cancelled (nothing left to do)."
         exit 1
     else
-        # Sven failed → abort pacman transaction with error
         echo "error: Sven removal failed (exit $SVEN_EXIT)."
         exit 1
     fi
