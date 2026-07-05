@@ -514,7 +514,7 @@ class InstallTransaction(Transaction):
             hr.run_phase("pre_install", pkg.version)
 
             # Extract!
-            files_extracted = ext.extract(archive)
+            files_extracted = ext.extract(archive, pkg=pkg, reason=0 if (self.explicit and pkg.name in explicit_names) else 1)
             all_extracted_files.extend(files_extracted)
             
             if self.verbose:

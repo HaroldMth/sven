@@ -1,0 +1,12 @@
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Checking if Sven is running...
+When = PreTransaction
+Exec = /usr/lib/sven/check-sven-lock.sh
+AbortOnFail

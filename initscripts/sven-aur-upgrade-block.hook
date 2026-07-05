@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Upgrade
+Type = Package
+Target = *
+
+[Action]
+Description = Checking for Sven-managed AUR packages...
+When = PreTransaction
+Exec = /usr/lib/sven/check-sven-aur-upgrade.sh
+AbortOnFail

@@ -118,6 +118,8 @@ def run_makepkg(
     cmd = [
         "makepkg",
         "--nodeps",        # Trust Sven for dependencies (skip pacman checks)
+                           # CRITICAL: --nodeps prevents makepkg from calling
+                           # pacman -S, which would deadlock with Sven's lock.
         "--noconfirm",     # Don't ask for confirmation
         "--clean",         # Clean after build
         "--force",         # Overwrite existing package

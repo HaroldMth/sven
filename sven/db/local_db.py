@@ -278,15 +278,23 @@ class LocalDB:
 
     # ── Write ─────────────────────────────────────────────────
 
+    def _atomic_write(self, path: Path, content: str) -> None:
+        """Write to a temp file, then rename atomically (POSIX-safe)."""
+        tmp = path.parent / f"{path.name}.tmp.{os.getpid()}"
+        tmp.write_text(content, encoding="utf-8")
+        os.replace(str(tmp), str(path))
+
     def register(
         self,
         pkg      : Package,
         files    : list[str],
         explicit : bool = True,
+        synced_only : bool = False,
     ):
         """
         Record a package as installed.
         Creates the DB entry directory with desc + files.
+        Uses atomic writes to prevent half-written entries on crash.
         """
         pkg.explicit     = explicit
         pkg.install_date = int(time.time())
@@ -294,7 +302,7 @@ class LocalDB:
         entry_dir = self.db_path / pkg.full_name
         entry_dir.mkdir(parents=True, exist_ok=True)
 
-        # Write desc as JSON
+        # Write desc as JSON (atomic)
         desc_data = {
             "name"          : pkg.name,
             "version"       : pkg.version,
@@ -315,14 +323,13 @@ class LocalDB:
             "install_date"  : pkg.install_date,
             "aur_maintainer": pkg.aur_maintainer,
             "version_verified": pkg.version_verified,
+            "sven_synced_only": synced_only,  # True = pacman-installed, not removable by Sven
         }
 
-        with open(entry_dir / "desc", "w") as f:
-            json.dump(desc_data, f, indent=2)
+        self._atomic_write(entry_dir / "desc", json.dumps(desc_data, indent=2))
 
-        # Write files list
-        with open(entry_dir / "files", "w") as f:
-            f.write("\n".join(files))
+        # Write files list (atomic)
+        self._atomic_write(entry_dir / "files", "\n".join(files))
 
         # Update in-memory cache
         self._cache[pkg.name] = pkg

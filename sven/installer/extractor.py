@@ -14,6 +14,7 @@ from pathlib import Path
 from ..config import get_config
 from ..exceptions import ExtractionError
 from ..libsven import extract_zst
+from .alpm_mirror import write_alpm_local_entry
 
 METADATA_FILES = {".PKGINFO", ".MTREE", ".INSTALL", ".BUILDINFO"}
 
@@ -26,10 +27,14 @@ class Extractor:
         if not self.root.exists():
             self.root.mkdir(parents=True, exist_ok=True)
 
-    def extract(self, archive_path: str, backup_configs: list[str] = None) -> list[str]:
+    def extract(self, archive_path: str, backup_configs: list[str] = None, pkg=None, reason: int = 0) -> list[str]:
         """
         Extract a .pkg.tar.zst archive to the root filesystem.
         Uses C libarchive engine when available, falls back to Python.
+
+        If *pkg* is provided, also writes an ALPM-compatible local DB entry
+        so that pacman -Q / -Qo can QUERY the package.
+        (We write desc + .sven sidecar only; no files/mtree, so pacman -R fails safely.)
 
         Returns list of absolute extracted file paths.
         """
@@ -45,5 +50,9 @@ class Extractor:
         if self.verbose:
             for f in extracted:
                 print(f"     [DEBUG] Extracted: {f}")
+
+        # Write read-only ALPM mirror entry so pacman can QUERY the package
+        if pkg is not None:
+            write_alpm_local_entry(pkg, reason=reason)
 
         return extracted

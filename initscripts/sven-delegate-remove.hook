@@ -1,0 +1,10 @@
+[Trigger]
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Delegating Sven-managed package removal to Sven...
+When = PreTransaction
+Exec = /usr/lib/sven/delegate-sven-remove.sh
+AbortOnFail

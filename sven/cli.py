@@ -123,6 +123,8 @@ def build_parser() -> argparse.ArgumentParser:
     # ── sync ──────────────────────────────────────────────────
     p_sync = subparsers.add_parser("sync", help="Refresh package databases")
     p_sync.add_argument("--force", action="store_true", help="Force even if fresh")
+    p_sync.add_argument("--from-pacman", action="store_true", dest="sync_from_pacman",
+                        help="Mirror pacman's installed package database into Sven")
 
     # ── check-version ──────────────────────────────────────────
     p_check = subparsers.add_parser("check-version", help="Check available versions of a package")
@@ -327,7 +329,7 @@ def main():
         run()
     elif cmd == "sync":
         from .commands.sync import run
-        run()
+        run(force=getattr(args, "force", False), from_pacman=getattr(args, "sync_from_pacman", False))
     elif cmd == "check-version":
         from .commands.check_version import run
         run(args.package)

@@ -37,6 +37,7 @@ DB_SYNC       = f"{DB_BASE}/sync"
 DB_AUR_CACHE  = f"{DB_BASE}/aur_cache"
 DB_SNAPSHOTS  = f"{DB_BASE}/snapshots"
 DB_LOCK       = f"{DB_BASE}/lock"
+PACMAN_LOCK   = f"{_ROOT}/var/lib/pacman/db.lck"
 
 # ── Cache ────────────────────────────────────────────────────
 CACHE_BASE    = f"{_ROOT}/var/cache/sven"

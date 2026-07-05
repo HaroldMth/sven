@@ -1,0 +1,881 @@
+diff --git a/PKGBUILD b/PKGBUILD
+index 3ef29de..63648d0 100644
+--- a/PKGBUILD
++++ b/PKGBUILD
+@@ -9,8 +9,20 @@ license=('GPL3')
+ depends=('git' 'gnupg' 'curl' 'tar' 'zstd')
+ provides=('sven')
+ conflicts=('sven' 'sven-git')
+-source=("sven-x86_64-linux::https://github.com/haroldmth/sven/releases/download/v${pkgver}/sven-x86_64-linux")
+-sha256sums=('SKIP') # Use actual sha256 in production or use workflow to inline it
++source=("sven-x86_64-linux::https://github.com/haroldmth/sven/releases/download/v${pkgver}/sven-x86_64-linux"
++        "sven-lock-check.hook"
++        "check-sven-lock.sh"
++        "sven-aur-upgrade-block.hook"
++        "check-sven-aur-upgrade.sh"
++        "sven-delegate-remove.hook"
++        "delegate-sven-remove.sh")
++sha256sums=('SKIP'  # sven binary — use actual sha256 in production
++            'SKIP'  # sven-lock-check.hook
++            'SKIP'  # check-sven-lock.sh
++            'SKIP'  # sven-aur-upgrade-block.hook
++            'SKIP'  # check-sven-aur-upgrade.sh
++            'SKIP'  # sven-delegate-remove.hook
++            'SKIP') # delegate-sven-remove.sh
+ 
+ package() {
+     # Install binary
+@@ -53,4 +65,16 @@ ignored_packages  =
+ held_packages     =
+ EOF
+     install -Dm644 "${srcdir}/sven.conf" "${pkgdir}/etc/sven/sven.conf"
++
++    # Install ALPM hook so pacman respects Sven's lock
++    install -Dm644 "${srcdir}/sven-lock-check.hook" "${pkgdir}/usr/share/libalpm/hooks/sven-lock-check.hook"
++    install -Dm755 "${srcdir}/check-sven-lock.sh" "${pkgdir}/usr/lib/sven/check-sven-lock.sh"
++
++    # Install ALPM hook to block pacman from upgrading Sven-AUR packages
++    install -Dm644 "${srcdir}/sven-aur-upgrade-block.hook" "${pkgdir}/usr/share/libalpm/hooks/sven-aur-upgrade-block.hook"
++    install -Dm755 "${srcdir}/check-sven-aur-upgrade.sh" "${pkgdir}/usr/lib/sven/check-sven-aur-upgrade.sh"
++
++    # Install ALPM hook to delegate Sven package removal to Sven
++    install -Dm644 "${srcdir}/sven-delegate-remove.hook" "${pkgdir}/usr/share/libalpm/hooks/sven-delegate-remove.hook"
++    install -Dm755 "${srcdir}/delegate-sven-remove.sh" "${pkgdir}/usr/lib/sven/delegate-sven-remove.sh"
+ }
+diff --git a/initscripts/sven-aur-upgrade-block.hook b/initscripts/sven-aur-upgrade-block.hook
+new file mode 100644
+index 0000000..f8cbb5d
+--- /dev/null
++++ b/initscripts/sven-aur-upgrade-block.hook
+@@ -0,0 +1,10 @@
++[Trigger]
++Operation = Upgrade
++Type = Package
++Target = *
++
++[Action]
++Description = Checking for Sven-managed AUR packages...
++When = PreTransaction
++Exec = /usr/lib/sven/check-sven-aur-upgrade.sh
++AbortOnFail
+diff --git a/initscripts/sven-delegate-remove.hook b/initscripts/sven-delegate-remove.hook
+new file mode 100644
+index 0000000..e0b2bb1
+--- /dev/null
++++ b/initscripts/sven-delegate-remove.hook
+@@ -0,0 +1,10 @@
++[Trigger]
++Operation = Remove
++Type = Package
++Target = *
++
++[Action]
++Description = Delegating Sven-managed package removal to Sven...
++When = PreTransaction
++Exec = /usr/lib/sven/delegate-sven-remove.sh
++AbortOnFail
+diff --git a/initscripts/sven-lock-check.hook b/initscripts/sven-lock-check.hook
+new file mode 100644
+index 0000000..ff053c5
+--- /dev/null
++++ b/initscripts/sven-lock-check.hook
+@@ -0,0 +1,12 @@
++[Trigger]
++Operation = Install
++Operation = Upgrade
++Operation = Remove
++Type = Package
++Target = *
++
++[Action]
++Description = Checking if Sven is running...
++When = PreTransaction
++Exec = /usr/lib/sven/check-sven-lock.sh
++AbortOnFail
+diff --git a/scripts/check-sven-aur-upgrade.sh b/scripts/check-sven-aur-upgrade.sh
+new file mode 100644
+index 0000000..f80d044
+--- /dev/null
++++ b/scripts/check-sven-aur-upgrade.sh
+@@ -0,0 +1,41 @@
++#!/bin/bash
++# ============================================================
++#  Sven — Seven OS Package Manager
++#  HANS TECH © 2024 — GPL v3
++#  check-sven-aur-upgrade.sh — ALPM PreTransaction hook script
++# ============================================================
++#  Blocks pacman from upgrading packages that Sven installed from AUR.
++#  These packages are identified by a .sven sidecar file with origin=aur.
++#  Users should use 'sven upgrade' or 'sven install' for AUR packages.
++# ============================================================
++
++PACMAN_LOCAL="/var/lib/pacman/local"
++BLOCKED=""
++
++if [ ! -d "$PACMAN_LOCAL" ]; then
++    exit 0
++fi
++
++for entry in "$PACMAN_LOCAL"/*; do
++    [ -d "$entry" ] || continue
++    sven_file="$entry/.sven"
++    if [ -f "$sven_file" ]; then
++        origin=$(grep '"origin"' "$sven_file" 2>/dev/null | sed 's/.*: *"//; s/".*//')
++        if [ "$origin" = "aur" ]; then
++            # Extract package name from dirname (name-version)
++            pkg_name=$(basename "$entry" | sed 's/-[^-]*-[^-]*$//')
++            BLOCKED="$BLOCKED $pkg_name"
++        fi
++    fi
++done
++
++if [ -n "$BLOCKED" ]; then
++    echo "error: The following packages were installed by Sven from AUR:"
++    for pkg in $BLOCKED; do
++        echo "       - $pkg"
++    done
++    echo "       Use 'sven upgrade <pkg>' or 'sven install <pkg>' instead of pacman."
++    exit 1
++fi
++
++exit 0
+diff --git a/scripts/check-sven-lock.sh b/scripts/check-sven-lock.sh
+new file mode 100644
+index 0000000..1848b14
+--- /dev/null
++++ b/scripts/check-sven-lock.sh
+@@ -0,0 +1,25 @@
++#!/bin/bash
++# ============================================================
++#  Sven — Seven OS Package Manager
++#  HANS TECH © 2024 — GPL v3
++#  check-sven-lock.sh — ALPM PreTransaction hook script
++# ============================================================
++#  Aborts pacman if Sven is currently holding its database lock.
++#  Also cleans up stale locks (dead PID).
++# ============================================================
++
++SVEN_LOCK="/var/lib/sven/lock"
++
++if [ -f "$SVEN_LOCK" ]; then
++    PID=$(cat "$SVEN_LOCK" 2>/dev/null)
++    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
++        echo "error: Sven is currently running (PID: $PID, lock: $SVEN_LOCK)"
++        echo "       Wait for Sven to finish, then retry."
++        exit 1
++    else
++        # Stale lock — clean it up and let pacman proceed
++        rm -f "$SVEN_LOCK"
++    fi
++fi
++
++exit 0
+diff --git a/scripts/delegate-sven-remove.sh b/scripts/delegate-sven-remove.sh
+new file mode 100644
+index 0000000..6807ac9
+--- /dev/null
++++ b/scripts/delegate-sven-remove.sh
+@@ -0,0 +1,98 @@
++#!/bin/bash
++# ============================================================
++#  Sven — Seven OS Package Manager
++#  HANS TECH © 2024 — GPL v3
++#  delegate-sven-remove.sh — ALPM PreTransaction hook script
++# ============================================================
++#  Intercepts pacman -R on Sven-managed packages and delegates
++#  removal to Sven instead. This ensures Sven's hooks, rollback
++#  snapshots, and cleanup logic all run properly.
++#
++#  If ALL packages in the transaction are Sven-managed, we
++#  delegate the entire operation to Sven and abort pacman.
++#  If MIXED (some Sven, some pacman), we abort and tell the user
++#  to split the operation.
++# ============================================================
++
++PACMAN_LOCAL="/var/lib/pacman/local"
++SVEN_LOCK="/var/lib/sven/lock"
++
++# Pacman passes the target list as arguments to the hook script
++# Format: pkgname pkgname ...
++TARGETS="$@"
++
++if [ -z "$TARGETS" ]; then
++    exit 0
++fi
++
++SVEN_PKGS=""
++PACMAN_PKGS=""
++
++for pkg in $TARGETS; do
++    # Find the package directory in pacman local DB
++    found=""
++    for entry in "$PACMAN_LOCAL"/*; do
++        [ -d "$entry" ] || continue
++        basename_entry=$(basename "$entry")
++        # entry name is "name-version"; check if it starts with "pkg-"
++        if [ "$basename_entry" = "$pkg" ] || echo "$basename_entry" | grep -q "^${pkg}-"; then
++            found="$entry"
++            break
++        fi
++    done
++
++    if [ -n "$found" ] && [ -f "$found/.sven" ]; then
++        SVEN_PKGS="$SVEN_PKGS $pkg"
++    else
++        PACMAN_PKGS="$PACMAN_PKGS $pkg"
++    fi
++done
++
++# Nothing is Sven-managed → let pacman handle it normally
++if [ -z "$SVEN_PKGS" ]; then
++    exit 0
++fi
++
++# Mixed: some Sven, some pacman → abort, tell user to split
++if [ -n "$PACMAN_PKGS" ]; then
++    echo "error: Cannot mix Sven-managed and pacman-managed packages in one removal."
++    echo ""
++    echo "       Sven-managed: $SVEN_PKGS"
++    echo "       Pacman-managed: $PACMAN_PKGS"
++    echo ""
++    echo "       Run separately:"
++    echo "         sven remove$SVEN_PKGS"
++    echo "         pacman -R$PACMAN_PKGS"
++    exit 1
++fi
++
++# All targets are Sven-managed → delegate to Sven
++# Check if Sven is already running (would deadlock)
++if [ -f "$SVEN_LOCK" ]; then
++    PID=$(cat "$SVEN_LOCK" 2>/dev/null)
++    if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
++        echo "error: Sven is currently running (PID: $PID)."
++        echo "       Wait for it to finish, then retry."
++        exit 1
++    else
++        rm -f "$SVEN_LOCK"
++    fi
++fi
++
++echo "[sven] Delegating removal to Sven: $SVEN_PKGS"
++if command -v sven >/dev/null 2>&1; then
++    sven remove $SVEN_PKGS
++    SVEN_EXIT=$?
++    if [ $SVEN_EXIT -eq 0 ]; then
++        # Sven succeeded → abort pacman transaction (nothing left for pacman to do)
++        exit 1
++    else
++        # Sven failed → abort pacman transaction with error
++        echo "error: Sven removal failed (exit $SVEN_EXIT)."
++        exit 1
++    fi
++else
++    echo "error: sven command not found. Cannot delegate removal."
++    echo "       Use 'sven remove$SVEN_PKGS' manually."
++    exit 1
++fi
+diff --git a/sven/builder/makepkg.py b/sven/builder/makepkg.py
+index e08e6d9..cdf01b6 100644
+--- a/sven/builder/makepkg.py
++++ b/sven/builder/makepkg.py
+@@ -118,6 +118,8 @@ def run_makepkg(
+     cmd = [
+         "makepkg",
+         "--nodeps",        # Trust Sven for dependencies (skip pacman checks)
++                           # CRITICAL: --nodeps prevents makepkg from calling
++                           # pacman -S, which would deadlock with Sven's lock.
+         "--noconfirm",     # Don't ask for confirmation
+         "--clean",         # Clean after build
+         "--force",         # Overwrite existing package
+diff --git a/sven/cli.py b/sven/cli.py
+index 2477485..362f6a6 100644
+--- a/sven/cli.py
++++ b/sven/cli.py
+@@ -123,6 +123,8 @@ def build_parser() -> argparse.ArgumentParser:
+     # ── sync ──────────────────────────────────────────────────
+     p_sync = subparsers.add_parser("sync", help="Refresh package databases")
+     p_sync.add_argument("--force", action="store_true", help="Force even if fresh")
++    p_sync.add_argument("--from-pacman", action="store_true", dest="sync_from_pacman",
++                        help="Mirror pacman's installed package database into Sven")
+ 
+     # ── check-version ──────────────────────────────────────────
+     p_check = subparsers.add_parser("check-version", help="Check available versions of a package")
+@@ -327,7 +329,7 @@ def main():
+         run()
+     elif cmd == "sync":
+         from .commands.sync import run
+-        run()
++        run(force=getattr(args, "force", False), from_pacman=getattr(args, "sync_from_pacman", False))
+     elif cmd == "check-version":
+         from .commands.check_version import run
+         run(args.package)
+diff --git a/sven/commands/remove.py b/sven/commands/remove.py
+index 8fc3856..40f548f 100644
+--- a/sven/commands/remove.py
++++ b/sven/commands/remove.py
+@@ -4,28 +4,139 @@
+ #  sven/commands/remove.py
+ # ============================================================
+ import sys
++import subprocess
++from pathlib import Path
+ from ..transaction import RemoveTransaction
+-from ..ui import print_banner, print_section, print_success, print_error, confirm
++from ..db.local_db import LocalDB
++from ..installer.alpm_mirror import is_sven_managed_alpm_entry, remove_alpm_local_entry
++from ..ui import print_banner, print_section, print_success, print_error, print_info, confirm
++
++def _classify_packages(packages: list[str]) -> tuple[list[str], list[str], list[str]]:
++    """
++    Classify packages into:
++      • sven_managed   — tracked by Sven (including Sven-tagged ALPM entries)
++      • pacman_only    — tracked by pacman only, not Sven
++      • not_found      — not installed at all
++    """
++    local_db = LocalDB()
++    sven_managed = []
++    pacman_only = []
++    not_found = []
++
++    pacman_local = Path("/var/lib/pacman/local")
++
++    for p in packages:
++        sven_pkg = local_db.get(p)
++        if sven_pkg:
++            sven_managed.append(p)
++            continue
++
++        # Not in Sven DB — check pacman local
++        found_in_pacman = False
++        if pacman_local.exists():
++            for entry in pacman_local.iterdir():
++                if not entry.is_dir():
++                    continue
++                if entry.name.startswith(f"{p}-"):
++                    version = entry.name[len(p)+1:]
++                    # Even if pacman has it, check if it was originally Sven-managed
++                    if is_sven_managed_alpm_entry(p, version):
++                        sven_managed.append(p)
++                    else:
++                        pacman_only.append(p)
++                    found_in_pacman = True
++                    break
++
++        if not found_in_pacman:
++            not_found.append(p)
++
++    return sven_managed, pacman_only, not_found
++
+ 
+ def run(packages: list[str], recursive: bool = False, force_protected: bool = False):
+     print_banner()
+-    
++
+     if not packages:
+         print_error("No targets specified for removal.")
+         sys.exit(1)
+-        
++
++    # ── Step 1: Classify (no locks needed, just reading) ───────
++    sven_pkgs, pacman_pkgs, missing = _classify_packages(packages)
++
++    if missing:
++        print_error(f"Package(s) not installed: {', '.join(missing)}")
++        sys.exit(1)
++
++    # ── Step 2: Handle pacman-only packages (NO Sven lock held) ─
++    if pacman_pkgs:
++        print_info(
++            f"The following packages are managed by pacman: {', '.join(pacman_pkgs)}"
++        )
++        print_info("Sven will delegate removal to pacman -R.")
++        if not confirm("Proceed with pacman removal?"):
++            print_error("Removal aborted by user.")
++            sys.exit(0)
++
++        cmd = ["pacman", "-R"]
++        if recursive:
++            cmd.append("-s")
++        cmd.extend(pacman_pkgs)
++        try:
++            subprocess.run(cmd, check=True)
++        except subprocess.CalledProcessError as e:
++            print_error(f"pacman removal failed: {e}")
++            sys.exit(1)
++        except FileNotFoundError:
++            print_error("pacman not found. Cannot remove pacman-managed packages.")
++            sys.exit(1)
++
++        for p in pacman_pkgs:
++            print_success(f"{p} removed via pacman")
++
++    # ── Step 3: Handle Sven-managed packages (acquire lock) ────
++    if not sven_pkgs:
++        return  # Nothing left for Sven to do
++
+     print_section("Computing reverse dependencies...")
+-    
+-    if not confirm("Proceed with removal?"):
++
++    if not confirm("Proceed with Sven removal?"):
+         print_error("Removal aborted by user.")
+         sys.exit(0)
+-        
++
+     tx = RemoveTransaction()
+-    
+-    if tx.execute(packages, force_protected=force_protected):
+ 
+-        for p in packages:
++    # Check for synced_only packages (pacman-managed, not removable by Sven)
++    removable = []
++    for p in sven_pkgs:
++        sven_pkg = LocalDB().get(p)
++        if sven_pkg:
++            # Check if this was a synced-only entry (from sven sync --from-pacman)
++            entry_dir = Path("/var/lib/sven/installed") / sven_pkg.full_name / "desc"
++            if entry_dir.exists():
++                import json
++                try:
++                    data = json.loads(entry_dir.read_text(encoding="utf-8"))
++                    if data.get("sven_synced_only"):
++                        print_error(f"{p} was installed by pacman, not Sven.")
++                        print_info(f"Use 'pacman -R {p}' to remove it.")
++                        continue
++                except (OSError, json.JSONDecodeError):
++                    pass
++            removable.append(p)
++        else:
++            removable.append(p)
++
++    if not removable:
++        print_error("No Sven-managed packages to remove.")
++        sys.exit(1)
++
++    if tx.execute(removable, force_protected=force_protected):
++        for p in removable:
+             print_success(f"{p} removed successfully")
++            # Clean up ALPM mirror entry
++            sven_pkg = LocalDB().get(p)
++            if sven_pkg:
++                remove_alpm_local_entry(p, sven_pkg.version)
+     else:
+         print_error("Removal failed.")
+         sys.exit(1)
+diff --git a/sven/constants.py b/sven/constants.py
+index 4551115..2cc34ce 100644
+--- a/sven/constants.py
++++ b/sven/constants.py
+@@ -37,6 +37,7 @@ DB_SYNC       = f"{DB_BASE}/sync"
+ DB_AUR_CACHE  = f"{DB_BASE}/aur_cache"
+ DB_SNAPSHOTS  = f"{DB_BASE}/snapshots"
+ DB_LOCK       = f"{DB_BASE}/lock"
++PACMAN_LOCK   = f"{_ROOT}/var/lib/pacman/db.lck"
+ 
+ # ── Cache ────────────────────────────────────────────────────
+ CACHE_BASE    = f"{_ROOT}/var/cache/sven"
+diff --git a/sven/db/local_db.py b/sven/db/local_db.py
+index beb8a12..91fb786 100644
+--- a/sven/db/local_db.py
++++ b/sven/db/local_db.py
+@@ -278,15 +278,23 @@ class LocalDB:
+ 
+     # ── Write ─────────────────────────────────────────────────
+ 
++    def _atomic_write(self, path: Path, content: str) -> None:
++        """Write to a temp file, then rename atomically (POSIX-safe)."""
++        tmp = path.parent / f"{path.name}.tmp.{os.getpid()}"
++        tmp.write_text(content, encoding="utf-8")
++        os.replace(str(tmp), str(path))
++
+     def register(
+         self,
+         pkg      : Package,
+         files    : list[str],
+         explicit : bool = True,
++        synced_only : bool = False,
+     ):
+         """
+         Record a package as installed.
+         Creates the DB entry directory with desc + files.
++        Uses atomic writes to prevent half-written entries on crash.
+         """
+         pkg.explicit     = explicit
+         pkg.install_date = int(time.time())
+@@ -294,7 +302,7 @@ class LocalDB:
+         entry_dir = self.db_path / pkg.full_name
+         entry_dir.mkdir(parents=True, exist_ok=True)
+ 
+-        # Write desc as JSON
++        # Write desc as JSON (atomic)
+         desc_data = {
+             "name"          : pkg.name,
+             "version"       : pkg.version,
+@@ -315,14 +323,13 @@ class LocalDB:
+             "install_date"  : pkg.install_date,
+             "aur_maintainer": pkg.aur_maintainer,
+             "version_verified": pkg.version_verified,
++            "sven_synced_only": synced_only,  # True = pacman-installed, not removable by Sven
+         }
+ 
+-        with open(entry_dir / "desc", "w") as f:
+-            json.dump(desc_data, f, indent=2)
++        self._atomic_write(entry_dir / "desc", json.dumps(desc_data, indent=2))
+ 
+-        # Write files list
+-        with open(entry_dir / "files", "w") as f:
+-            f.write("\n".join(files))
++        # Write files list (atomic)
++        self._atomic_write(entry_dir / "files", "\n".join(files))
+ 
+         # Update in-memory cache
+         self._cache[pkg.name] = pkg
+diff --git a/sven/db/pacman_sync.py b/sven/db/pacman_sync.py
+new file mode 100644
+index 0000000..a849e79
+--- /dev/null
++++ b/sven/db/pacman_sync.py
+@@ -0,0 +1,146 @@
++# ============================================================
++#  Sven — Seven OS Package Manager
++#  HANS TECH © 2024 — GPL v3
++#  db/pacman_sync.py — Read pacman local DB into Sven
++# ============================================================
++#
++#  Bidirectional awareness: pacman installed something? Sven learns about it.
++#  Creates lightweight Sven LocalDB entries for pacman-managed packages
++#  so that `sven list` and `sven info` show the full system picture.
++#
++#  IMPORTANT: synced entries are marked with synced_only=True.
++#  `sven remove` will refuse to remove synced-only packages,
++#  directing the user to use `pacman -R` instead.
++# ============================================================
++
++import os
++import time
++from pathlib import Path
++from typing import Optional
++
++from .models import Package
++from .local_db import LocalDB
++
++
++def _parse_alpm_desc(desc_text: str) -> dict:
++    """Parse an ALPM desc file (same format Sven already knows from sync_db)."""
++    fields: dict[str, list[str]] = {}
++    current_key = None
++
++    for line in desc_text.splitlines():
++        line = line.strip()
++        if not line:
++            current_key = None
++            continue
++        if line.startswith("%") and line.endswith("%"):
++            current_key = line[1:-1]
++            fields[current_key] = []
++        elif current_key is not None:
++            fields[current_key].append(line)
++
++    def get(key: str) -> str:
++        return fields.get(key, [""])[0]
++
++    def get_list(key: str) -> list[str]:
++        return fields.get(key, [])
++
++    return {
++        "name":        get("NAME"),
++        "version":     get("VERSION"),
++        "desc":        get("DESC"),
++        "url":         get("URL"),
++        "arch":        get("ARCH") or "x86_64",
++        "builddate":   int(get("BUILDDATE") or 0),
++        "packager":    get("PACKAGER"),
++        "isize":       int(get("SIZE") or 0),
++        "deps":        get_list("DEPENDS"),
++        "optdeps":     get_list("OPTDEPENDS"),
++        "conflicts":   get_list("CONFLICTS"),
++        "provides":    get_list("PROVIDES"),
++        "replaces":    get_list("REPLACES"),
++        "license":     get_list("LICENSE"),
++        "origin":      "pacman",
++    }
++
++
++def sync_from_pacman(
++    local_db: Optional[LocalDB] = None,
++    root: str = "/",
++    verbose: bool = False,
++) -> tuple[int, int, int]:
++    """
++    Scan /var/lib/pacman/local/ and create/update Sven LocalDB entries
++    for any packages not already tracked by Sven.
++
++    Entries created by this sync are marked with synced_only=True.
++    They are QUERYABLE but not REMOVABLE by Sven.
++
++    Returns:
++        (added_count, updated_count, skipped_count)
++    """
++    if local_db is None:
++        local_db = LocalDB()
++
++    pacman_local = Path(root).resolve() / "var/lib/pacman/local"
++    if not pacman_local.exists():
++        if verbose:
++            print(f"[sync] Pacman local DB not found: {pacman_local}")
++        return (0, 0, 0)
++
++    added = 0
++    updated = 0
++    skipped = 0
++
++    for pkg_dir in pacman_local.iterdir():
++        if not pkg_dir.is_dir():
++            continue
++
++        desc_path = pkg_dir / "desc"
++        if not desc_path.exists():
++            continue
++
++        try:
++            desc_text = desc_path.read_text(encoding="utf-8")
++        except OSError:
++            continue
++
++        data = _parse_alpm_desc(desc_text)
++        if not data["name"]:
++            continue
++
++        # If Sven already has this exact version, skip
++        existing = local_db.get(data["name"])
++        if existing and existing.version == data["version"]:
++            skipped += 1
++            continue
++
++        # Build a Package object with synced_only flag
++        # We store synced_only in the JSON metadata, not in the Package dataclass
++        # (since Package doesn't have that field). We handle this in LocalDB._save_package.
++        pkg = Package(
++            name        = data["name"],
++            version     = data["version"],
++            desc        = data["desc"],
++            url         = data["url"],
++            repo        = data["origin"],
++            origin      = data["origin"],
++            arch        = data["arch"],
++            isize       = data["isize"],
++            packager    = data["packager"],
++            builddate   = data["builddate"],
++            deps        = data["deps"],
++            optdeps     = data["optdeps"],
++            conflicts   = data["conflicts"],
++            provides    = data["provides"],
++            replaces    = data["replaces"],
++            license     = data["license"],
++        )
++
++        # Write to Sven's DB with synced_only marker
++        local_db._save_package(pkg, synced_only=True)
++
++        added += 1
++        if verbose:
++            print(f"[sync] Mirrored {pkg.name}-{pkg.version} (origin: pacman, synced_only)")
++
++    return (added, updated, skipped)
+diff --git a/sven/installer/alpm_mirror.py b/sven/installer/alpm_mirror.py
+new file mode 100644
+index 0000000..cc01fca
+--- /dev/null
++++ b/sven/installer/alpm_mirror.py
+@@ -0,0 +1,140 @@
++# ============================================================
++#  Sven — Seven OS Package Manager
++#  HANS TECH © 2024 — GPL v3
++#  installer/alpm_mirror.py — Write ALPM-compatible local DB entries
++# ============================================================
++#
++#  Sven is the primary package manager. This module writes a
++#  *read-only compatibility mirror* into /var/lib/pacman/local/
++#  so that pacman -Q, -Qi, -Qo, -Ql can QUERY Sven-installed packages.
++#
++#  SAFETY DESIGN:
++#  • We write ONLY "desc" (metadata). No "files" list.
++#  • We write a ".sven" sidecar file (JSON) for our own tracking.
++#  • Without "files", pacman -R fails safely with "missing files database".
++#  • Without "mtree", pacman -Qk fails gracefully.
++#  • Pacman can SEE the package but cannot safely REMOVE it.
++#  • Removal is always delegated back to Sven.
++# ============================================================
++
++import json
++import os
++import time
++from pathlib import Path
++from typing import Optional
++
++from ..config import get_config
++from ..exceptions import SvenError
++
++
++def _write_desc(pkg_dir: Path, pkg, reason: int = 0) -> None:
++    """Write ALPM desc file from a Package object."""
++    lines = []
++
++    def field(name: str, value: str):
++        lines.append(f"%{name}%")
++        lines.append(value)
++
++    def list_field(name: str, values: list):
++        if values:
++            lines.append(f"%{name}%")
++            lines.extend(values)
++
++    field("NAME",        pkg.name)
++    field("VERSION",     pkg.version)
++    field("DESC",        pkg.desc or "")
++    field("URL",         pkg.url or "")
++    field("ARCH",        pkg.arch or "x86_64")
++    field("BUILDDATE",   str(int(pkg.builddate or 0)))
++    field("INSTALLDATE", str(int(time.time())))
++    field("PACKAGER",    pkg.packager or "Sven Package Manager")
++    field("SIZE",        str(int(pkg.isize or 0)))
++    field("REASON",      str(int(reason)))  # 0 = explicit, 1 = dependency
++
++    list_field("LICENSE",     pkg.license or [])
++    list_field("DEPENDS",     pkg.deps or [])
++    list_field("OPTDEPENDS",  pkg.optdeps or [])
++    list_field("CONFLICTS",   pkg.conflicts or [])
++    list_field("PROVIDES",    pkg.provides or [])
++    list_field("REPLACES",    pkg.replaces or [])
++
++    # We intentionally do NOT write %SVEN% or any custom field in desc.
++    # All Sven metadata lives in the sidecar .sven file.
++
++    desc_path = pkg_dir / "desc"
++    desc_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
++
++
++def _write_sven_sidecar(pkg_dir: Path, pkg, reason: int = 0) -> None:
++    """Write a .sven sidecar file with Sven-specific metadata."""
++    sidecar = {
++        "name": pkg.name,
++        "version": pkg.version,
++        "origin": pkg.origin or "official",
++        "reason": reason,
++        "managed_by": "sven",
++        "timestamp": int(time.time()),
++    }
++    sidecar_path = pkg_dir / ".sven"
++    sidecar_path.write_text(json.dumps(sidecar, indent=2) + "\n", encoding="utf-8")
++
++
++def write_alpm_local_entry(pkg, reason: int = 0) -> None:
++    """
++    Write a pacman-compatible (read-only) local DB entry for a Sven-installed package.
++
++    Writes:
++      • desc  — ALPM metadata (pacman -Q, -Qi, -Qo can read this)
++      • .sven — Sven sidecar marker (JSON, ignored by pacman)
++
++    Does NOT write:
++      • files — prevents pacman -R from operating safely
++      • mtree — prevents pacman -Qk from running (acceptable)
++      • install — Sven handles its own hooks
++    """
++    config = get_config()
++    root = Path(config.install_root or "/")
++    local_dir = root / "var/lib/pacman/local"
++    local_dir.mkdir(parents=True, exist_ok=True)
++
++    pkg_dir = local_dir / f"{pkg.name}-{pkg.version}"
++    pkg_dir.mkdir(parents=True, exist_ok=True)
++
++    _write_desc(pkg_dir, pkg, reason=reason)
++    _write_sven_sidecar(pkg_dir, pkg, reason=reason)
++
++    # We do NOT write "files" or "mtree".
++    # This is intentional: it makes pacman -R fail safely.
++
++
++def remove_alpm_local_entry(pkg_name: str, pkg_version: str) -> None:
++    """Remove a pacman-compatible local DB entry when Sven removes a package."""
++    config = get_config()
++    root = Path(config.install_root or "/")
++    local_dir = root / "var/lib/pacman/local"
++    pkg_dir = local_dir / f"{pkg_name}-{pkg_version}"
++
++    if pkg_dir.exists():
++        import shutil
++        shutil.rmtree(pkg_dir)
++
++
++def is_sven_managed_alpm_entry(pkg_name: str, pkg_version: str) -> bool:
++    """Check whether a pacman local DB entry was written by Sven (has .sven sidecar)."""
++    config = get_config()
++    root = Path(config.install_root or "/")
++    sidecar_path = root / "var/lib/pacman/local" / f"{pkg_name}-{pkg_version}" / ".sven"
++    return sidecar_path.exists()
++
++
++def read_sven_sidecar(pkg_name: str, pkg_version: str) -> Optional[dict]:
++    """Read the .sven sidecar for a package, if it exists."""
++    config = get_config()
++    root = Path(config.install_root or "/")
++    sidecar_path = root / "var/lib/pacman/local" / f"{pkg_name}-{pkg_version}" / ".sven"
++    if not sidecar_path.exists():
++        return None
++    try:
++        return json.loads(sidecar_path.read_text(encoding="utf-8"))
++    except (OSError, json.JSONDecodeError):
++        return None
+diff --git a/sven/installer/extractor.py b/sven/installer/extractor.py
+index c4c4263..9f8a7b6 100644
+--- a/sven/installer/extractor.py
++++ b/sven/installer/extractor.py
+@@ -14,6 +14,7 @@ from pathlib import Path
+ from ..config import get_config
+ from ..exceptions import ExtractionError
+ from ..libsven import extract_zst
++from .alpm_mirror import write_alpm_local_entry
+ 
+ METADATA_FILES = {".PKGINFO", ".MTREE", ".INSTALL", ".BUILDINFO"}
+ 
+@@ -26,11 +27,15 @@ class Extractor:
+         if not self.root.exists():
+             self.root.mkdir(parents=True, exist_ok=True)
+ 
+-    def extract(self, archive_path: str, backup_configs: list[str] = None) -> list[str]:
++    def extract(self, archive_path: str, backup_configs: list[str] = None, pkg=None, reason: int = 0) -> list[str]:
+         """
+         Extract a .pkg.tar.zst archive to the root filesystem.
+         Uses C libarchive engine when available, falls back to Python.
+ 
++        If *pkg* is provided, also writes an ALPM-compatible local DB entry
++        so that pacman -Q / -Qo can QUERY the package.
++        (We write desc + .sven sidecar only; no files/mtree, so pacman -R fails safely.)
++
+         Returns list of absolute extracted file paths.
+         """
+         path = Path(archive_path)
+@@ -46,4 +51,8 @@ class Extractor:
+             for f in extracted:
+                 print(f"     [DEBUG] Extracted: {f}")
+ 
++        # Write read-only ALPM mirror entry so pacman can QUERY the package
++        if pkg is not None:
++            write_alpm_local_entry(pkg, reason=reason)
++
+         return extracted
+diff --git a/sven/transaction.py b/sven/transaction.py
+index 908c871..a8b7bd6 100644
+--- a/sven/transaction.py
++++ b/sven/transaction.py
+@@ -514,7 +514,7 @@ class InstallTransaction(Transaction):
+             hr.run_phase("pre_install", pkg.version)
+ 
+             # Extract!
+-            files_extracted = ext.extract(archive)
++            files_extracted = ext.extract(archive, pkg=pkg, reason=0 if (self.explicit and pkg.name in explicit_names) else 1)
+             all_extracted_files.extend(files_extracted)
+             
+             if self.verbose:

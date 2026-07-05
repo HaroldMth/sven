@@ -9,8 +9,20 @@ license=('GPL3')
 depends=('git' 'gnupg' 'curl' 'tar' 'zstd')
 provides=('sven')
 conflicts=('sven' 'sven-git')
-source=("sven-x86_64-linux::https://github.com/haroldmth/sven/releases/download/v${pkgver}/sven-x86_64-linux")
-sha256sums=('SKIP') # Use actual sha256 in production or use workflow to inline it
+source=("sven-x86_64-linux::https://github.com/haroldmth/sven/releases/download/v${pkgver}/sven-x86_64-linux"
+        "sven-lock-check.hook"
+        "check-sven-lock.sh"
+        "sven-aur-upgrade-block.hook"
+        "check-sven-aur-upgrade.sh"
+        "sven-delegate-remove.hook"
+        "delegate-sven-remove.sh")
+sha256sums=('SKIP'  # sven binary — use actual sha256 in production
+            'SKIP'  # sven-lock-check.hook
+            'SKIP'  # check-sven-lock.sh
+            'SKIP'  # sven-aur-upgrade-block.hook
+            'SKIP'  # check-sven-aur-upgrade.sh
+            'SKIP'  # sven-delegate-remove.hook
+            'SKIP') # delegate-sven-remove.sh
 
 package() {
     # Install binary
@@ -53,4 +65,16 @@ ignored_packages  =
 held_packages     =
 EOF
     install -Dm644 "${srcdir}/sven.conf" "${pkgdir}/etc/sven/sven.conf"
+
+    # Install ALPM hook so pacman respects Sven's lock
+    install -Dm644 "${srcdir}/sven-lock-check.hook" "${pkgdir}/usr/share/libalpm/hooks/sven-lock-check.hook"
+    install -Dm755 "${srcdir}/check-sven-lock.sh" "${pkgdir}/usr/lib/sven/check-sven-lock.sh"
+
+    # Install ALPM hook to block pacman from upgrading Sven-AUR packages
+    install -Dm644 "${srcdir}/sven-aur-upgrade-block.hook" "${pkgdir}/usr/share/libalpm/hooks/sven-aur-upgrade-block.hook"
+    install -Dm755 "${srcdir}/check-sven-aur-upgrade.sh" "${pkgdir}/usr/lib/sven/check-sven-aur-upgrade.sh"
+
+    # Install ALPM hook to delegate Sven package removal to Sven
+    install -Dm644 "${srcdir}/sven-delegate-remove.hook" "${pkgdir}/usr/share/libalpm/hooks/sven-delegate-remove.hook"
+    install -Dm755 "${srcdir}/delegate-sven-remove.sh" "${pkgdir}/usr/lib/sven/delegate-sven-remove.sh"
 }
