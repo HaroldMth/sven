@@ -1,7 +1,15 @@
 diff --git a/PKGBUILD b/PKGBUILD
-index 3ef29de..63648d0 100644
+index 3ef29de..427a3f1 100644
 --- a/PKGBUILD
 +++ b/PKGBUILD
+@@ -1,6 +1,6 @@
+ # Maintainer: HANS TECH <open-source@hanstech.dev>
+ pkgname=sven-bin
+-pkgver=1.1.0
++pkgver=2.1.0
+ pkgrel=1
+ pkgdesc="Sven Package Manager for Seven OS (LFS) - PyInstaller Binary"
+ arch=('x86_64')
 @@ -9,8 +9,20 @@ license=('GPL3')
  depends=('git' 'gnupg' 'curl' 'tar' 'zstd')
  provides=('sven')
@@ -92,6 +100,19 @@ index 0000000..ff053c5
 +When = PreTransaction
 +Exec = /usr/lib/sven/check-sven-lock.sh
 +AbortOnFail
+diff --git a/pyproject.toml b/pyproject.toml
+index 608d150..6da8b9e 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -4,7 +4,7 @@ build-backend = "setuptools.backends.legacy:build"
+ 
+ [project]
+ name = "sven"
+-version = "2.0.9"
++version = "2.1.0"
+ description = "The package manager for Seven OS — powered by Arch repos, built for freedom."
+ readme = "README.md"
+ license = { file = "LICENSE" }
 diff --git a/scripts/check-sven-aur-upgrade.sh b/scripts/check-sven-aur-upgrade.sh
 new file mode 100644
 index 0000000..f80d044
@@ -463,9 +484,18 @@ index 8fc3856..40f548f 100644
          print_error("Removal failed.")
          sys.exit(1)
 diff --git a/sven/constants.py b/sven/constants.py
-index 4551115..2cc34ce 100644
+index 4551115..45d3dfa 100644
 --- a/sven/constants.py
 +++ b/sven/constants.py
+@@ -18,7 +18,7 @@ except Exception:
+     pass
+ 
+ # ── Version ──────────────────────────────────────────────────
+-VERSION       = "2.0.9"
++VERSION       = "2.1.0"
+ CODENAME      = "Forge"
+ 
+ # ── Identity ─────────────────────────────────────────────────
 @@ -37,6 +37,7 @@ DB_SYNC       = f"{DB_BASE}/sync"
  DB_AUR_CACHE  = f"{DB_BASE}/aur_cache"
  DB_SNAPSHOTS  = f"{DB_BASE}/snapshots"
